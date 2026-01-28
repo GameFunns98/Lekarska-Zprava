@@ -20,46 +20,6 @@ const documentTypes = [
   { value: "INF", label: "INF - Infekce" },
 ]
 
-// JSON Schema pro Structured Outputs (response_format: json_schema)
-const MEDICAL_REPORT_SCHEMA = {
-  type: "object",
-  additionalProperties: false,
-  properties: {
-    oa: { type: "string", description: "OA - Onemocnění aktuální" },
-    ra: { type: "string", description: "RA - Rizikové faktory" },
-    pa: { type: "string", description: "PA - Problémy předchozí" },
-    sa: { type: "string", description: "SA - Symptomy aktuálního stavu" },
-    fa: { type: "string", description: "FA - Fyzikální nález" },
-    aa: { type: "string", description: "AA - Anamnéza alergií" },
-    ea: { type: "string", description: "EA - Expozice a faktory prostředí" },
-    no: { type: "string", description: "NO - Nutné další záznamy" },
-    vf: { type: "string", description: "VF - Vital signs (životní funkce)" },
-    subj: { type: "string", description: "Subj. - Subjektivní hodnocení" },
-    obj: { type: "string", description: "Obj. - Objektivní zjištění" },
-    examination: { type: "string", description: "Vyšetření" },
-    therapy: { type: "string", description: "Terapie" },
-    diagnosis: { type: "string", description: "Diagnóza" },
-    icd10: { type: "string", description: "MKN-10 kód" },
-  },
-  required: [
-    "oa",
-    "ra",
-    "pa",
-    "sa",
-    "fa",
-    "aa",
-    "ea",
-    "no",
-    "vf",
-    "subj",
-    "obj",
-    "examination",
-    "therapy",
-    "diagnosis",
-    "icd10",
-  ],
-} as const
-
 export default function MedicalReportApp() {
   const [isOnline, setIsOnline] = useState(true)
   const [autoSaved, setAutoSaved] = useState(false)
@@ -69,10 +29,6 @@ export default function MedicalReportApp() {
   const [doctorName, setDoctorName] = useState("MUDr. Fero Lakatos")
   const [copied, setCopied] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
-
-  // OpenAI API (vložený klíč v UI)
-  const [openaiApiKey, setOpenaiApiKey] = useState("")
-  const [keyInSession, setKeyInSession] = useState(false)
 
   // Anamnéza
   const [oa, setOa] = useState("")
@@ -100,26 +56,17 @@ export default function MedicalReportApp() {
   const [aiPrompt, setAiPrompt] = useState("")
 
   useEffect(() => {
-    const updateOnlineStatus = () => setIsOnline(navigator.onLine)
+    const updateOnlineStatus = () => {
+      setIsOnline(navigator.onLine)
+    }
+
     updateOnlineStatus()
     window.addEventListener("online", updateOnlineStatus)
     window.addEventListener("offline", updateOnlineStatus)
+
     return () => {
       window.removeEventListener("online", updateOnlineStatus)
       window.removeEventListener("offline", updateOnlineStatus)
-    }
-  }, [])
-
-  useEffect(() => {
-    // Načti API klíč jen ze sessionStorage (méně zlé než localStorage)
-    try {
-      const k = sessionStorage.getItem("openai_api_key")
-      if (k) {
-        setOpenaiApiKey(k)
-        setKeyInSession(true)
-      }
-    } catch {
-      // ignore
     }
   }, [])
 
@@ -227,27 +174,6 @@ export default function MedicalReportApp() {
     setTimeout(() => setAutoSaved(false), 2000)
   }
 
-  const handleSaveKeyToSession = () => {
-    const k = openaiApiKey.trim()
-    if (!k) return
-    try {
-      sessionStorage.setItem("openai_api_key", k)
-      setKeyInSession(true)
-    } catch {
-      // ignore
-    }
-  }
-
-  const handleClearKeyFromSession = () => {
-    try {
-      sessionStorage.removeItem("openai_api_key")
-    } catch {
-      // ignore
-    }
-    setKeyInSession(false)
-    setOpenaiApiKey("")
-  }
-
   const generateDocumentName = () => {
     const today = new Date()
     const day = String(today.getDate()).padStart(2, "0")
@@ -295,33 +221,389 @@ ${doctorName}
 `
   }
 
-  const handleAiAssist = async () => {
-    if (!aiPrompt.trim()) return
+const handleAiAssist = async () => {
+  if (!aiPrompt.trim()) return
 
-    if (!isOnline) {
-      alert("AI asistent vyžaduje připojení k internetu. V offline režimu můžete formulář vyplnit ručně.")
-      return
+  if (!isOnline) {
+    alert("AI asistent vyžaduje připojení k internetu. V offline režimu můžete formulář vyplnit ručně.")
+    return
+  }
+
+  setIsGenerating(true)
+  try {
+    const response = await fetch("/api/ai", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: aiPrompt }),
+    })
+
+    const data = await response.json().catch(() => ({} as any))
+
+    if (!response.ok) {
+      const msg = (data?.error || "").toString()
+
+      if (response.status === 429 && msg.toLowerCase().includes("quota")) {
+        alert("AI je nedostupná: vyčerpaná kvóta / není aktivní billing na OpenAI API. Formulář můžeš vyplnit ručně.")
+        return
+      }
+
+      const extra = [data?.type, data?.code].filter(Boolean).join(" / ")
+      throw new Error(`${data?.error || "Chyba při volání AI."}${extra ? ` (${extra})` : ""}`)
     }
 
-    const apiKey = openaiApiKey.trim()
-    if (!apiKey) {
-      alert("Chybí OpenAI API key. Vložte jej prosím do pole 'OpenAI API key'.")
-      return
-    }
+    const parsed = data?.fields || {}
 
-    setIsGenerating(true)
-    try {
-      // Chat Completions + Structured Outputs (json_schema)
-      const response = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: "gpt-4o-mini",
-          temperature: 0.2,
-          messages: [
-            {
-              role: "system",
-              content:
+    if (parsed.oa) setOa(parsed.oa)
+    if (parsed.ra) setRa(parsed.ra)
+    if (parsed.pa) setPa(parsed.pa)
+    if (parsed.sa) setSa(parsed.sa)
+    if (parsed.fa) setFa(parsed.fa)
+    if (parsed.aa) setAa(parsed.aa)
+    if (parsed.ea) setEa(parsed.ea)
+    if (parsed.no) setNo(parsed.no)
+    if (parsed.vf) setVf(parsed.vf)
+    if (parsed.subj) setSubj(parsed.subj)
+    if (parsed.obj) setObj(parsed.obj)
+    if (parsed.examination) setExamination(parsed.examination)
+    if (parsed.therapy) setTherapy(parsed.therapy)
+    if (parsed.diagnosis) setDiagnosis(parsed.diagnosis)
+    if (parsed.icd10) setIcd10(parsed.icd10)
+  } catch (error) {
+    console.error("[AI] Error:", error)
+    alert(`Chyba AI asistenta: ${(error as Error).message}`)
+  } finally {
+    setIsGenerating(false)
+  }
+}
+
+
+  const handleCopyReport = () => {
+    const report = generateReport()
+    navigator.clipboard.writeText(report)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  const handleDownload = () => {
+    const report = generateReport()
+    const blob = new Blob([report], { type: "text/plain;charset=utf-8" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `${generateDocumentName()}.txt`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-gray-900 dark:to-gray-800 p-4 md:p-8">
+      <div className="max-w-7xl mx-auto space-y-6">
+        {/* Header */}
+        <div className="text-center space-y-2">
+          <div className="flex items-center justify-center gap-2">
+            <FileText className="w-10 h-10 text-blue-600" />
+            <h1 className="text-4xl font-bold text-gray-900 dark:text-white">Asistent pro lékařské zprávy</h1>
+            <div className="flex items-center gap-1">
+              {isOnline ? (
+                <Badge
+                  variant="secondary"
+                  className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100"
+                >
+                  <Wifi className="w-3 h-3 mr-1" />
+                  Online
+                </Badge>
+              ) : (
+                <Badge
+                  variant="secondary"
+                  className="bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-100"
+                >
+                  <WifiOff className="w-3 h-3 mr-1" />
+                  Offline
+                </Badge>
+              )}
+            </div>
+          </div>
+          <p className="text-gray-600 dark:text-gray-300">Vytvářejte strukturované lékařské zprávy rychle a přesně</p>
+          {autoSaved && (
+            <div className="flex items-center justify-center gap-1 text-sm text-green-600 dark:text-green-400">
+              <Check className="w-3 h-3" />
+              Data automaticky uložena
+            </div>
+          )}
+        </div>
+
+        {!isOnline && (
+          <Alert className="bg-orange-50 border-orange-200 dark:bg-orange-900/20 dark:border-orange-800">
+            <WifiOff className="h-4 w-4" />
+            <AlertDescription>
+              <strong>Offline režim:</strong> AI asistent není dostupný. Můžete ale pokračovat v ručním vyplňování
+              formuláře. Všechna data se ukládají automaticky do paměti prohlížeče. Po obnovení připojení bude AI
+              asistent opět k dispozici.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {/* AI Assistant Card */}
+        <Card className="border-2 border-blue-200 dark:border-blue-800 bg-gradient-to-br from-blue-50 to-white dark:from-gray-800 dark:to-gray-900">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-blue-600" />
+              AI Asistent - Rychlé vyplnění
+              {!isOnline && (
+                <Badge variant="outline" className="ml-2">
+                  Vyžaduje internet
+                </Badge>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <Label htmlFor="ai-prompt">Popište případ pacienta</Label>
+              <Textarea
+                id="ai-prompt"
+                placeholder="Např: Pacient 45 let, epilepsie od dětství, včera večer měl záchvat grand mal, na terapii valproátem..."
+                value={aiPrompt}
+                onChange={(e) => setAiPrompt(e.target.value)}
+                className="min-h-[100px]"
+                disabled={!isOnline}
+              />
+            </div>
+            <Button
+              onClick={handleAiAssist}
+              disabled={isGenerating || !aiPrompt.trim() || !isOnline}
+              className="w-full bg-blue-600 hover:bg-blue-700"
+            >
+              {isGenerating ? (
+                <>
+                  <Sparkles className="w-4 h-4 mr-2 animate-spin" />
+                  Generuji zprávu...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4 mr-2" />
+                  Vygenerovat zprávu pomocí AI
+                </>
+              )}
+            </Button>
+          </CardContent>
+        </Card>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Left Column - Form */}
+          <div className="space-y-6">
+            {/* Document Info */}
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle>Informace o dokumentu</CardTitle>
+                  <Button onClick={handleManualSave} variant="outline" size="sm">
+                    <Save className="w-4 h-4 mr-2" />
+                    Uložit
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <Label htmlFor="doc-type">Typ dokumentu</Label>
+                  <Select value={documentType} onValueChange={setDocumentType}>
+                    <SelectTrigger id="doc-type">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {documentTypes.map((type) => (
+                        <SelectItem key={type.value} value={type.value}>
+                          {type.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label htmlFor="case-number">Číslo případu dne</Label>
+                  <Input
+                    id="case-number"
+                    type="number"
+                    min="1"
+                    value={caseNumber}
+                    onChange={(e) => setCaseNumber(e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="doctor">Jméno lékaře</Label>
+                  <Input id="doctor" value={doctorName} onChange={(e) => setDoctorName(e.target.value)} />
+                </div>
+
+                <div className="pt-2">
+                  <Label className="text-sm text-muted-foreground">Název dokumentu</Label>
+                  <Badge variant="secondary" className="text-base font-mono mt-1 w-full justify-center py-2">
+                    {generateDocumentName()}
+                  </Badge>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Form Tabs */}
+            <Card>
+              <CardContent className="pt-6">
+                <Tabs defaultValue="anamneza">
+                  <TabsList className="grid grid-cols-4 w-full">
+                    <TabsTrigger value="anamneza">Anamnéza</TabsTrigger>
+                    <TabsTrigger value="status">Status</TabsTrigger>
+                    <TabsTrigger value="vysetreni">Vyšetření</TabsTrigger>
+                    <TabsTrigger value="zaver">Závěr</TabsTrigger>
+                  </TabsList>
+
+                  <TabsContent value="anamneza" className="space-y-4 mt-4">
+                    <div>
+                      <Label htmlFor="oa">OA - Osobní anamnéza</Label>
+                      <Textarea id="oa" value={oa} onChange={(e) => setOa(e.target.value)} />
+                    </div>
+                    <div>
+                      <Label htmlFor="ra">RA - Rodinná anamnéza</Label>
+                      <Textarea id="ra" value={ra} onChange={(e) => setRa(e.target.value)} />
+                    </div>
+                    <div>
+                      <Label htmlFor="pa">PA - Problémy předchozí</Label>
+                      <Textarea id="pa" value={pa} onChange={(e) => setPa(e.target.value)} />
+                    </div>
+                    <div>
+                      <Label htmlFor="sa">SA - Sociální anamnéza</Label>
+                      <Textarea id="sa" value={sa} onChange={(e) => setSa(e.target.value)} />
+                    </div>
+                    <div>
+                      <Label htmlFor="fa">FA - Farmakologická anamnéza</Label>
+                      <Textarea id="fa" value={fa} onChange={(e) => setFa(e.target.value)} />
+                    </div>
+                    <div>
+                      <Label htmlFor="aa">AA - Anamnéza alergií</Label>
+                      <Textarea id="aa" value={aa} onChange={(e) => setAa(e.target.value)} />
+                    </div>
+                    <div>
+                      <Label htmlFor="ea">EA - Expozice a faktory prostředí</Label>
+                      <Textarea id="ea" value={ea} onChange={(e) => setEa(e.target.value)} />
+                    </div>
+                    <div>
+                      <Label htmlFor="no">NO - Nynější onemocnění</Label>
+                      <Textarea id="no" value={no} onChange={(e) => setNo(e.target.value)} />
+                    </div>
+                  </TabsContent>
+
+                  <TabsContent value="status" className="space-y-4 mt-4">
+                    <div>
+                      <Label htmlFor="vf">VF - Vital signs (životní funkce)</Label>
+                      <Textarea
+                        id="vf"
+                        value={vf}
+                        onChange={(e) => setVf(e.target.value)}
+                        placeholder="Např: Tlak 120/80 mmHg, puls 72 bpm, teplota 36.6°C"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="subj">Subj. - Subjektivní hodnocení</Label>
+                      <Textarea
+                        id="subj"
+                        value={subj}
+                        onChange={(e) => setSubj(e.target.value)}
+                        placeholder="Subjektivní stížnosti a pocity pacienta"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="obj">Obj. - Objektivní zjištění</Label>
+                      <Textarea
+                        id="obj"
+                        value={obj}
+                        onChange={(e) => setObj(e.target.value)}
+                        placeholder="Objektivní vyšetření a nálezy"
+                      />
+                    </div>
+                  </TabsContent>
+
+                  <TabsContent value="vysetreni" className="space-y-4 mt-4">
+                    <div>
+                      <Label htmlFor="examination">Vyšetření</Label>
+                      <Textarea
+                        id="examination"
+                        value={examination}
+                        onChange={(e) => setExamination(e.target.value)}
+                        className="min-h-[150px]"
+                        placeholder="Provedená vyšetření a jejich výsledky"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="therapy">Terapie</Label>
+                      <Textarea
+                        id="therapy"
+                        value={therapy}
+                        onChange={(e) => setTherapy(e.target.value)}
+                        className="min-h-[150px]"
+                        placeholder="Předepsaná nebo provedená léčba"
+                      />
+                    </div>
+                  </TabsContent>
+
+                  <TabsContent value="zaver" className="space-y-4 mt-4">
+                    <div>
+                      <Label htmlFor="diagnosis">Diagnóza</Label>
+                      <Input
+                        id="diagnosis"
+                        value={diagnosis}
+                        onChange={(e) => setDiagnosis(e.target.value)}
+                        placeholder="Např: Epilepsie, Generalizované tonicko-klonické záchvaty"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="icd10">MKN-10 kód</Label>
+                      <Input
+                        id="icd10"
+                        value={icd10}
+                        onChange={(e) => setIcd10(e.target.value)}
+                        placeholder="Např: G40.0"
+                      />
+                    </div>
+                  </TabsContent>
+                </Tabs>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Right Column - Preview */}
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Náhled zprávy</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="bg-white dark:bg-gray-950 border rounded-lg p-6 min-h-[600px] font-mono text-sm whitespace-pre-wrap">
+                  {generateReport()}
+                </div>
+                <div className="flex gap-2 mt-4">
+                  <Button onClick={handleCopyReport} variant="outline" className="flex-1 bg-transparent">
+                    {copied ? (
+                      <>
+                        <Check className="w-4 h-4 mr-2" />
+                        Zkopírováno
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-4 h-4 mr-2" />
+                        Kopírovat
+                      </>
+                    )}
+                  </Button>
+                  <Button onClick={handleDownload} className="flex-1">
+                    <Download className="w-4 h-4 mr-2" />
+                    Stáhnout
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
