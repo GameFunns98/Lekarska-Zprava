@@ -29,6 +29,7 @@ export default function MedicalReportApp() {
   const [doctorName, setDoctorName] = useState("MUDr. Fero Lakatos")
   const [copied, setCopied] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
+  const [aiProvider, setAiProvider] = useState<"openai" | "claude">("openai")
 
   // Anamnéza
   const [oa, setOa] = useState("")
@@ -234,7 +235,7 @@ const handleAiAssist = async () => {
     const response = await fetch("/api/ai", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: aiPrompt }),
+      body: JSON.stringify({ prompt: aiPrompt, provider: aiProvider }),
     })
 
     const data = await response.json().catch(() => ({} as any))
@@ -360,6 +361,18 @@ const handleAiAssist = async () => {
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
+              <Label htmlFor="ai-provider">AI poskytovatel</Label>
+              <Select value={aiProvider} onValueChange={(value) => setAiProvider(value as "openai" | "claude")}>
+                <SelectTrigger id="ai-provider">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="openai">OpenAI (GPT-4o mini)</SelectItem>
+                  <SelectItem value="claude">Claude (Anthropic)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
               <Label htmlFor="ai-prompt">Popište případ pacienta</Label>
               <Textarea
                 id="ai-prompt"
@@ -378,12 +391,12 @@ const handleAiAssist = async () => {
               {isGenerating ? (
                 <>
                   <Sparkles className="w-4 h-4 mr-2 animate-spin" />
-                  Generuji zprávu...
+                  Generuji zprávu přes {aiProvider === "claude" ? "Claude" : "OpenAI"}...
                 </>
               ) : (
                 <>
                   <Sparkles className="w-4 h-4 mr-2" />
-                  Vygenerovat zprávu pomocí AI
+                  Vygenerovat zprávu pomocí {aiProvider === "claude" ? "Claude" : "OpenAI"}
                 </>
               )}
             </Button>

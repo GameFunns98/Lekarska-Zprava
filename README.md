@@ -25,6 +25,20 @@ pnpm dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
+## AI API konfigurace
+
+Vytvořte `.env.local` se zvoleným poskytovatelem:
+
+```bash
+# OpenAI (výchozí)
+OPENAI_API_KEY=sk-...
+
+# Claude / Anthropic (volitelné)
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+V aplikaci lze pak u AI asistenta přepnout poskytovatele mezi **OpenAI** a **Claude**.
+
 ## Project Structure
 
 This project uses:
