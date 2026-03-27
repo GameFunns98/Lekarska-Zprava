@@ -1,6 +1,5 @@
 # Lékařská zpráva generátor
 
-Generated with BLACKBOX AI Builder
 
 ## Getting Started
 
