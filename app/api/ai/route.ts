@@ -4,10 +4,6 @@ import { NextResponse } from "next/server"
 
 export const runtime = "nodejs"
 
-const client = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-})
-
 const SYSTEM_PROMPT =
   "Jsi AI asistent pro lékařské zprávy. Pomáháš vytvářet strukturované lékařské zprávy v češtině. " +
   "Odpovídej POUZE jako validní JSON objekt s klíči: oa, ra, pa, sa, fa, aa, ea, no, vf, subj, obj, examination, therapy, diagnosis, icd10. " +
@@ -87,10 +83,38 @@ export async function POST(req: Request) {
           ?.find?.((part: any) => part?.type === "text")
           ?.text?.toString?.()
           ?.trim?.() ?? "{}"
+    } else if (provider === "github") {
+      if (!process.env.GITHUB_TOKEN) {
+        return NextResponse.json({ error: "Chybí GITHUB_TOKEN v .env.local" }, { status: 500 })
+      }
+
+      const githubClient = new OpenAI({
+        apiKey: process.env.GITHUB_TOKEN,
+        baseURL: "https://models.github.ai/inference",
+      })
+
+      const completion = await githubClient.chat.completions.create({
+        model: "openai/gpt-4.1-mini",
+        temperature: 0.2,
+        messages: [
+          { role: "system", content: SYSTEM_PROMPT },
+          {
+            role: "user",
+            content: `Na základě tohoto popisu případu vytvoř strukturovanou lékařskou zprávu: ${prompt}`,
+          },
+        ],
+        response_format: { type: "json_object" },
+      })
+
+      text = completion.choices?.[0]?.message?.content ?? "{}"
     } else {
       if (!process.env.OPENAI_API_KEY) {
         return NextResponse.json({ error: "Chybí OPENAI_API_KEY v .env.local" }, { status: 500 })
       }
+
+      const client = new OpenAI({
+        apiKey: process.env.OPENAI_API_KEY,
+      })
 
       const completion = await client.chat.completions.create({
         model: "gpt-4o-mini",

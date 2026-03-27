@@ -1,6 +1,5 @@
 # Lékařská zpráva generátor
 
-
 ## Getting Started
 
 First, install the dependencies:
@@ -35,13 +34,17 @@ OPENAI_API_KEY=sk-...
 
 # Claude / Anthropic (volitelné)
 ANTHROPIC_API_KEY=sk-ant-...
+
+# GitHub Models (volitelné)
+GITHUB_TOKEN=ghp_...
 ```
 
-V aplikaci lze pak u AI asistenta přepnout poskytovatele mezi **OpenAI** a **Claude**.
+V aplikaci lze pak u AI asistenta přepnout poskytovatele mezi **OpenAI**, **Claude** a **GitHub Models**.
 
 ## Project Structure
 
 This project uses:
+
 - **Next.js** - React framework for production
 - **React** - UI library
 - **TypeScript** - Type-safe JavaScript

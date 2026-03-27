@@ -21,6 +21,12 @@ const documentTypes = [
 ]
 
 export default function MedicalReportApp() {
+  const providerLabel: Record<"openai" | "claude" | "github", string> = {
+    openai: "OpenAI",
+    claude: "Claude",
+    github: "GitHub",
+  }
+
   const [isOnline, setIsOnline] = useState(true)
   const [autoSaved, setAutoSaved] = useState(false)
 
@@ -29,7 +35,7 @@ export default function MedicalReportApp() {
   const [doctorName, setDoctorName] = useState("MUDr. Fero Lakatos")
   const [copied, setCopied] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
-  const [aiProvider, setAiProvider] = useState<"openai" | "claude">("openai")
+  const [aiProvider, setAiProvider] = useState<"openai" | "claude" | "github">("openai")
 
   // Anamnéza
   const [oa, setOa] = useState("")
@@ -362,13 +368,17 @@ const handleAiAssist = async () => {
           <CardContent className="space-y-4">
             <div>
               <Label htmlFor="ai-provider">AI poskytovatel</Label>
-              <Select value={aiProvider} onValueChange={(value) => setAiProvider(value as "openai" | "claude")}>
+              <Select
+                value={aiProvider}
+                onValueChange={(value) => setAiProvider(value as "openai" | "claude" | "github")}
+              >
                 <SelectTrigger id="ai-provider">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="openai">OpenAI (GPT-4o mini)</SelectItem>
                   <SelectItem value="claude">Claude (Anthropic)</SelectItem>
+                  <SelectItem value="github">GitHub Models (GITHUB_TOKEN)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -391,12 +401,12 @@ const handleAiAssist = async () => {
               {isGenerating ? (
                 <>
                   <Sparkles className="w-4 h-4 mr-2 animate-spin" />
-                  Generuji zprávu přes {aiProvider === "claude" ? "Claude" : "OpenAI"}...
+                  Generuji zprávu přes {providerLabel[aiProvider]}...
                 </>
               ) : (
                 <>
                   <Sparkles className="w-4 h-4 mr-2" />
-                  Vygenerovat zprávu pomocí {aiProvider === "claude" ? "Claude" : "OpenAI"}
+                  Vygenerovat zprávu pomocí {providerLabel[aiProvider]}
                 </>
               )}
             </Button>
