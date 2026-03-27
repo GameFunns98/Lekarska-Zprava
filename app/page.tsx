@@ -467,7 +467,7 @@ const handleAiAssist = async () => {
                       <Textarea id="ra" value={ra} onChange={(e) => setRa(e.target.value)} />
                     </div>
                     <div>
-                      <Label htmlFor="pa">PA - Problémy předchozí</Label>
+                      <Label htmlFor="pa">PA - Pandemiologická anamnéza</Label>
                       <Textarea id="pa" value={pa} onChange={(e) => setPa(e.target.value)} />
                     </div>
                     <div>
