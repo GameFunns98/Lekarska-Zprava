@@ -228,6 +228,8 @@ ${doctorName}
 `
   }
 
+const providerLabel = aiProvider === "claude" ? "Claude" : aiProvider === "copilot" ? "GitHub Copilot" : "OpenAI"
+
 const handleAiAssist = async () => {
   if (!aiPrompt.trim()) return
 

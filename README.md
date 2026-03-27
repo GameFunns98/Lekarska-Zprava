@@ -39,7 +39,7 @@ ANTHROPIC_API_KEY=sk-ant-...
 GITHUB_TOKEN=ghp_...
 ```
 
-V aplikaci lze pak u AI asistenta přepnout poskytovatele mezi **OpenAI**, **Claude** a **GitHub Models**.
+V aplikaci lze pak u AI asistenta přepnout poskytovatele mezi **OpenAI** a **Claude**.
 
 ## Project Structure
 
