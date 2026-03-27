@@ -378,7 +378,7 @@ const handleAiAssist = async () => {
                 <SelectContent>
                   <SelectItem value="openai">OpenAI (GPT-4o mini)</SelectItem>
                   <SelectItem value="claude">Claude (Anthropic)</SelectItem>
-                  <SelectItem value="github">GitHub Models (GITHUB_TOKEN)</SelectItem>
+                  <SelectItem value="github">GitHub Models</SelectItem>
                 </SelectContent>
               </Select>
             </div>
