@@ -35,9 +35,14 @@ OPENAI_API_KEY=sk-...
 
 # Claude / Anthropic (volitelné)
 ANTHROPIC_API_KEY=sk-ant-...
+
+# GitHub Copilot / GitHub Models (volitelné)
+GITHUB_TOKEN=github_pat_...
+# alternativně
+GITHUB_MODELS_API_KEY=github_pat_...
 ```
 
-V aplikaci lze pak u AI asistenta přepnout poskytovatele mezi **OpenAI** a **Claude**.
+V aplikaci lze pak u AI asistenta přepnout poskytovatele mezi **OpenAI**, **Claude** a **GitHub Copilot / Models**.
 
 ## Project Structure
 

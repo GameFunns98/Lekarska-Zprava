@@ -87,6 +87,50 @@ export async function POST(req: Request) {
           ?.find?.((part: any) => part?.type === "text")
           ?.text?.toString?.()
           ?.trim?.() ?? "{}"
+    } else if (provider === "copilot" || provider === "github") {
+      const githubToken = process.env.GITHUB_TOKEN ?? process.env.GITHUB_MODELS_API_KEY
+      if (!githubToken) {
+        return NextResponse.json(
+          { error: "Chybí GITHUB_TOKEN (nebo GITHUB_MODELS_API_KEY) v .env.local" },
+          { status: 500 }
+        )
+      }
+
+      const githubResponse = await fetch("https://models.github.ai/inference/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/vnd.github+json",
+          Authorization: `Bearer ${githubToken}`,
+          "X-GitHub-Api-Version": "2026-03-10",
+        },
+        body: JSON.stringify({
+          model: "openai/gpt-4o",
+          temperature: 0.2,
+          messages: [
+            { role: "system", content: SYSTEM_PROMPT },
+            {
+              role: "user",
+              content:
+                `Na základě tohoto popisu případu vytvoř strukturovanou lékařskou zprávu: ${prompt}\n\n` +
+                "Vrať výstup pouze jako čistý JSON objekt bez markdownu.",
+            },
+          ],
+        }),
+      })
+
+      const githubData = await githubResponse.json().catch(() => ({} as any))
+      if (!githubResponse.ok) {
+        return NextResponse.json(
+          {
+            error: githubData?.error?.message || githubData?.message || "GitHub Models API chyba.",
+            code: githubData?.error?.code || githubData?.code,
+          },
+          { status: githubResponse.status || 502 }
+        )
+      }
+
+      text = githubData?.choices?.[0]?.message?.content?.toString?.()?.trim?.() ?? "{}"
     } else {
       if (!process.env.OPENAI_API_KEY) {
         return NextResponse.json({ error: "Chybí OPENAI_API_KEY v .env.local" }, { status: 500 })
