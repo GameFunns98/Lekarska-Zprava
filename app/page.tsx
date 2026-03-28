@@ -21,10 +21,10 @@ const documentTypes = [
 ]
 
 export default function MedicalReportApp() {
-  const providerLabel: Record<"openai" | "claude" | "github", string> = {
+  const providerLabel: Record<"github" | "claude" | "openai", string> = {
+    github: "GitHub",
     openai: "OpenAI",
     claude: "Claude",
-    github: "GitHub",
   }
 
   const [isOnline, setIsOnline] = useState(true)
@@ -39,7 +39,7 @@ export default function MedicalReportApp() {
   const [patientInsurance, setPatientInsurance] = useState("")
   const [copied, setCopied] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
-  const [aiProvider, setAiProvider] = useState<"openai" | "claude" | "github">("openai")
+  const [aiProvider, setAiProvider] = useState<"github" | "claude" | "openai">("github")
 
   // Anamnéza
   const [oa, setOa] = useState("")
@@ -412,15 +412,15 @@ const handleAiAssist = async () => {
               <Label htmlFor="ai-provider">AI poskytovatel</Label>
               <Select
                 value={aiProvider}
-                onValueChange={(value) => setAiProvider(value as "openai" | "claude" | "github")}
+                onValueChange={(value) => setAiProvider(value as "github" | "claude" | "openai")}
               >
                 <SelectTrigger id="ai-provider">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="github">GitHub Models</SelectItem>
                   <SelectItem value="openai">OpenAI (GPT-4o mini)</SelectItem>
                   <SelectItem value="claude">Claude (Anthropic)</SelectItem>
-                  <SelectItem value="github">GitHub Models</SelectItem>
                 </SelectContent>
               </Select>
             </div>
