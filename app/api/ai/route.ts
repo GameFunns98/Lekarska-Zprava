@@ -5,10 +5,54 @@ import { NextResponse } from "next/server"
 export const runtime = "nodejs"
 
 const SYSTEM_PROMPT =
-  "Jsi AI asistent pro lékařské zprávy. Pomáháš vytvářet strukturované lékařské zprávy v češtině. " +
-  "Odpovídej POUZE jako validní JSON objekt s klíči: patientFirstName, patientLastName, patientBirthDate, patientInsurance, oa, ra, pa, sa, fa, aa, ea, no, vf, subj, obj, examination, therapy, diagnosis, icd10. " +
-  "Pokud jsou v promptu uvedeny identifikační údaje pacienta, vyplň je do příslušných patient* klíčů. " +
-  "Hodnoty piš stručně a profesionálně. Nevkládej žádný další text mimo JSON."
+  "Jsi AI asistent pro lékařské zprávy v češtině. " +
+  "Vracíš POUZE validní JSON objekt bez markdownu a bez dalšího textu. " +
+  "Povolené klíče jsou přesně: patientFirstName, patientLastName, patientBirthDate, patientInsurance, oa, ra, pa, sa, fa, aa, ea, no, vf, subj, obj, examination, therapy, diagnosis, icd10. " +
+  "Každá hodnota musí být textový řetězec (string), stručný a klinicky relevantní; pokud údaj chybí, vrať prázdný string. " +
+  "NEVYMYŠLEJ identifikaci pacienta (jméno, datum narození, pojišťovna), pokud není v zadání. " +
+  "Význam klíčů: oa=osobní anamnéza, ra=rodinná anamnéza, pa=pandemiologická anamnéza, sa=sociální anamnéza, fa=farmakologická anamnéza, aa=alergologická anamnéza, ea=expozice/faktory prostředí, no=nynější onemocnění, vf=vitální funkce, subj=subjektivní potíže, obj=objektivní nález, examination=provedená vyšetření, therapy=léčba, diagnosis=diagnóza, icd10=MKN-10 kód. " +
+  "Do anamnestických polí nepatří jména lékařů ani kontaktní údaje. " +
+  "Když uživatel výslovně žádá ukázkový/demonstrativní příklad, vytvoř medicínsky smysluplný fiktivní obsah, ale patient* klíče ponech prázdné, pokud je uživatel nedal."
+
+const FIELD_KEYS: Array<keyof Fields> = [
+  "patientFirstName",
+  "patientLastName",
+  "patientBirthDate",
+  "patientInsurance",
+  "oa",
+  "ra",
+  "pa",
+  "sa",
+  "fa",
+  "aa",
+  "ea",
+  "no",
+  "vf",
+  "subj",
+  "obj",
+  "examination",
+  "therapy",
+  "diagnosis",
+  "icd10",
+]
+
+const normalizeFields = (value: unknown): Fields => {
+  const input = value && typeof value === "object" ? (value as Record<string, unknown>) : {}
+  const normalized: Fields = {}
+
+  for (const key of FIELD_KEYS) {
+    const raw = input[key]
+    if (typeof raw === "string") {
+      normalized[key] = raw.trim()
+    } else if (raw == null) {
+      normalized[key] = ""
+    } else {
+      normalized[key] = String(raw).trim()
+    }
+  }
+
+  return normalized
+}
 
 type Fields = {
   patientFirstName?: string
@@ -139,7 +183,7 @@ export async function POST(req: Request) {
 
     let fields: Fields = {}
     try {
-      fields = JSON.parse(text)
+      fields = normalizeFields(JSON.parse(text))
     } catch {
       return NextResponse.json(
         { error: "Model nevrátil validní JSON.", raw: text },
