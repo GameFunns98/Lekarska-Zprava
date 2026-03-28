@@ -33,6 +33,10 @@ export default function MedicalReportApp() {
   const [documentType, setDocumentType] = useState("EP")
   const [caseNumber, setCaseNumber] = useState("001")
   const [doctorName, setDoctorName] = useState("MUDr. Fero Lakatos")
+  const [patientFirstName, setPatientFirstName] = useState("")
+  const [patientLastName, setPatientLastName] = useState("")
+  const [patientBirthDate, setPatientBirthDate] = useState("")
+  const [patientInsurance, setPatientInsurance] = useState("")
   const [copied, setCopied] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
   const [aiProvider, setAiProvider] = useState<"openai" | "claude" | "github">("openai")
@@ -85,6 +89,10 @@ export default function MedicalReportApp() {
         setDocumentType(parsed.documentType || "EP")
         setCaseNumber(parsed.caseNumber || "001")
         setDoctorName(parsed.doctorName || "MUDr. Fero Lakatos")
+        setPatientFirstName(parsed.patientFirstName || "")
+        setPatientLastName(parsed.patientLastName || "")
+        setPatientBirthDate(parsed.patientBirthDate || "")
+        setPatientInsurance(parsed.patientInsurance || "")
         setOa(parsed.oa || "")
         setRa(parsed.ra || "")
         setPa(parsed.pa || "")
@@ -111,6 +119,10 @@ export default function MedicalReportApp() {
       documentType,
       caseNumber,
       doctorName,
+      patientFirstName,
+      patientLastName,
+      patientBirthDate,
+      patientInsurance,
       oa,
       ra,
       pa,
@@ -137,6 +149,10 @@ export default function MedicalReportApp() {
     documentType,
     caseNumber,
     doctorName,
+    patientFirstName,
+    patientLastName,
+    patientBirthDate,
+    patientInsurance,
     oa,
     ra,
     pa,
@@ -159,6 +175,10 @@ export default function MedicalReportApp() {
       documentType,
       caseNumber,
       doctorName,
+      patientFirstName,
+      patientLastName,
+      patientBirthDate,
+      patientInsurance,
       oa,
       ra,
       pa,
@@ -193,10 +213,16 @@ export default function MedicalReportApp() {
 
   const generateReport = () => {
     const documentName = generateDocumentName()
+    const patientFullName = [patientFirstName, patientLastName].filter(Boolean).join(" ")
 
     return `${documentName}
 
 ZÁZNAM DO DOKUMENTACE
+
+Identifikace pacienta:
+${patientFullName ? `Jméno a příjmení: ${patientFullName}` : ""}
+${patientBirthDate ? `Datum narození: ${patientBirthDate}` : ""}
+${patientInsurance ? `Pojišťovna: ${patientInsurance}` : ""}
 
 Anamnéza:
 ${oa ? `OA: ${oa}` : ""}
@@ -238,10 +264,22 @@ const handleAiAssist = async () => {
 
   setIsGenerating(true)
   try {
+    const patientContext = [
+      patientFirstName || patientLastName ? `Jméno a příjmení: ${[patientFirstName, patientLastName].filter(Boolean).join(" ")}` : "",
+      patientBirthDate ? `Datum narození: ${patientBirthDate}` : "",
+      patientInsurance ? `Pojišťovna: ${patientInsurance}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n")
+
+    const composedPrompt = patientContext
+      ? `${patientContext}\n\nPopis případu:\n${aiPrompt}`
+      : aiPrompt
+
     const response = await fetch("/api/ai", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: aiPrompt, provider: aiProvider }),
+      body: JSON.stringify({ prompt: composedPrompt, provider: aiProvider }),
     })
 
     const data = await response.json().catch(() => ({} as any))
@@ -260,6 +298,10 @@ const handleAiAssist = async () => {
 
     const parsed = data?.fields || {}
 
+    if (parsed.patientFirstName) setPatientFirstName(parsed.patientFirstName)
+    if (parsed.patientLastName) setPatientLastName(parsed.patientLastName)
+    if (parsed.patientBirthDate) setPatientBirthDate(parsed.patientBirthDate)
+    if (parsed.patientInsurance) setPatientInsurance(parsed.patientInsurance)
     if (parsed.oa) setOa(parsed.oa)
     if (parsed.ra) setRa(parsed.ra)
     if (parsed.pa) setPa(parsed.pa)
@@ -458,6 +500,48 @@ const handleAiAssist = async () => {
                 <div>
                   <Label htmlFor="doctor">Jméno lékaře</Label>
                   <Input id="doctor" value={doctorName} onChange={(e) => setDoctorName(e.target.value)} />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="patient-first-name">Jméno pacienta</Label>
+                    <Input
+                      id="patient-first-name"
+                      value={patientFirstName}
+                      onChange={(e) => setPatientFirstName(e.target.value)}
+                      placeholder="Např: Jan"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="patient-last-name">Příjmení pacienta</Label>
+                    <Input
+                      id="patient-last-name"
+                      value={patientLastName}
+                      onChange={(e) => setPatientLastName(e.target.value)}
+                      placeholder="Např: Novák"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="patient-birth-date">Datum narození</Label>
+                    <Input
+                      id="patient-birth-date"
+                      type="date"
+                      value={patientBirthDate}
+                      onChange={(e) => setPatientBirthDate(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="patient-insurance">Pojišťovna</Label>
+                    <Input
+                      id="patient-insurance"
+                      value={patientInsurance}
+                      onChange={(e) => setPatientInsurance(e.target.value)}
+                      placeholder="Např: VZP"
+                    />
+                  </div>
                 </div>
 
                 <div className="pt-2">

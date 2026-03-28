@@ -6,10 +6,15 @@ export const runtime = "nodejs"
 
 const SYSTEM_PROMPT =
   "Jsi AI asistent pro lékařské zprávy. Pomáháš vytvářet strukturované lékařské zprávy v češtině. " +
-  "Odpovídej POUZE jako validní JSON objekt s klíči: oa, ra, pa, sa, fa, aa, ea, no, vf, subj, obj, examination, therapy, diagnosis, icd10. " +
+  "Odpovídej POUZE jako validní JSON objekt s klíči: patientFirstName, patientLastName, patientBirthDate, patientInsurance, oa, ra, pa, sa, fa, aa, ea, no, vf, subj, obj, examination, therapy, diagnosis, icd10. " +
+  "Pokud jsou v promptu uvedeny identifikační údaje pacienta, vyplň je do příslušných patient* klíčů. " +
   "Hodnoty piš stručně a profesionálně. Nevkládej žádný další text mimo JSON."
 
 type Fields = {
+  patientFirstName?: string
+  patientLastName?: string
+  patientBirthDate?: string
+  patientInsurance?: string
   oa?: string
   ra?: string
   pa?: string
