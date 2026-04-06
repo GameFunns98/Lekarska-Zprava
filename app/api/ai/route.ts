@@ -11,7 +11,7 @@ const SYSTEM_PROMPT =
   "Každá hodnota musí být textový řetězec (string), stručný a klinicky relevantní; pokud údaj chybí, vrať prázdný string. " +
   "NEVYMYŠLEJ identifikaci pacienta (jméno, datum narození, pojišťovna), pokud není v zadání. " +
   "Význam klíčů: oa=osobní anamnéza, ra=rodinná anamnéza, pa=pandemiologická anamnéza, sa=sociální anamnéza, fa=farmakologická anamnéza, aa=alergologická anamnéza, ea=expozice/faktory prostředí, no=nynější onemocnění, vf=vitální funkce, subj=subjektivní potíže, obj=objektivní nález, examination=provedená vyšetření, therapy=léčba, diagnosis=diagnóza, icd10=MKN-10 kód. " +
-  "Do anamnestických polí nepatří jména lékařů ani kontaktní údaje. " +
+  "Do anamnestických polí nepatří jména lékařů ani kontaktní údaje. Pokud nevíš nějakou informaci ohledně anamnézy, vrať nezjištěno." +
   "Když uživatel výslovně žádá ukázkový/demonstrativní příklad, vytvoř medicínsky smysluplný fiktivní obsah, ale patient* klíče ponech prázdné, pokud je uživatel nedal."
 
 const FIELD_KEYS: Array<keyof Fields> = [
