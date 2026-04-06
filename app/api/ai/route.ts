@@ -99,16 +99,14 @@ export async function POST(req: Request) {
       })
 
       const completion = await client.chat.completions.create({
-        model: "nvidia/deepseek-r1",
-        temperature: 0.2,
+        model: "moonshotai/kimi-k2-instruct",
+        temperature: 0.6,
+        top_p: 0.9,
+        max_tokens: 4096,
         messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          {
-            role: "user",
-            content: `Na základě tohoto popisu případu vytvoř strukturovanou lékařskou zprávu: ${prompt}`,
-          },
+          { role: "user", content: `${SYSTEM_PROMPT}\n\nNa základě tohoto popisu případu vytvoř strukturovanou lékařskou zprávu: ${prompt}` },
         ],
-        response_format: { type: "json_object" },
+        stream: false,
       })
 
       text = completion.choices?.[0]?.message?.content ?? "{}"
