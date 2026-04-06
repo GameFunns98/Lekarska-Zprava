@@ -693,7 +693,7 @@ const handleAiAssist = async () => {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="deepseek">DeepSeek (NVIDIA)</SelectItem>
-                  <SelectItem value="github" disabled>GitHub Models</SelectItem>
+                  <SelectItem value="github">GitHub Models</SelectItem>
                   <SelectItem value="openai" disabled>OpenAI (GPT-4o mini)</SelectItem>
                   <SelectItem value="claude" disabled>Claude (Anthropic)</SelectItem>
                 </SelectContent>
