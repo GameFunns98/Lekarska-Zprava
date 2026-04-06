@@ -76,10 +76,11 @@ const DEFAULT_FORM_VALUES = {
 const VALID_DOCUMENT_TYPES = new Set(documentTypes.map((type) => type.value))
 
 export default function MedicalReportApp() {
-  const providerLabel: Record<"github" | "claude" | "openai", string> = {
+  const providerLabel: Record<"github" | "claude" | "openai" | "deepseek", string> = {
     github: "GitHub",
     openai: "OpenAI",
     claude: "Claude",
+    deepseek: "DeepSeek",
   }
 
   const [isOnline, setIsOnline] = useState(true)
@@ -97,7 +98,7 @@ export default function MedicalReportApp() {
   const [patientInsurance, setPatientInsurance] = useState("")
   const [copied, setCopied] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
-  const [aiProvider, setAiProvider] = useState<"github" | "claude" | "openai">("github")
+  const [aiProvider, setAiProvider] = useState<"github" | "claude" | "openai" | "deepseek">("deepseek")
 
   // Anamnéza
   const [oa, setOa] = useState("")
@@ -685,15 +686,16 @@ const handleAiAssist = async () => {
               <Label htmlFor="ai-provider">AI poskytovatel</Label>
               <Select
                 value={aiProvider}
-                onValueChange={(value) => setAiProvider(value as "github" | "claude" | "openai")}
+                onValueChange={(value) => setAiProvider(value as "github" | "claude" | "openai" | "deepseek")}
               >
                 <SelectTrigger id="ai-provider">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="github">GitHub Models</SelectItem>
-                  <SelectItem value="openai">OpenAI (GPT-4o mini)</SelectItem>
-                  <SelectItem value="claude">Claude (Anthropic)</SelectItem>
+                  <SelectItem value="deepseek">DeepSeek (NVIDIA)</SelectItem>
+                  <SelectItem value="github" disabled>GitHub Models</SelectItem>
+                  <SelectItem value="openai" disabled>OpenAI (GPT-4o mini)</SelectItem>
+                  <SelectItem value="claude" disabled>Claude (Anthropic)</SelectItem>
                 </SelectContent>
               </Select>
             </div>

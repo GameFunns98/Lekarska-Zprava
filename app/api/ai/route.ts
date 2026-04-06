@@ -80,7 +80,7 @@ export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => null)
     const prompt = (body?.prompt ?? "").toString().trim()
-    const provider = (body?.provider ?? "openai").toString().trim().toLowerCase()
+    const provider = (body?.provider ?? "deepseek").toString().trim().toLowerCase()
 
     if (!prompt) {
       return NextResponse.json({ error: "Chybí prompt." }, { status: 400 })
@@ -88,7 +88,31 @@ export async function POST(req: Request) {
 
     let text = "{}"
 
-    if (provider === "claude") {
+    if (provider === "deepseek") {
+      if (!process.env.NVIDIA_API_KEY) {
+        return NextResponse.json({ error: "Chybí NVIDIA_API_KEY v .env.local" }, { status: 500 })
+      }
+
+      const client = new OpenAI({
+        apiKey: process.env.NVIDIA_API_KEY,
+        baseURL: "https://integrate.api.nvidia.com/v1",
+      })
+
+      const completion = await client.chat.completions.create({
+        model: "nvidia/deepseek-r1",
+        temperature: 0.2,
+        messages: [
+          { role: "system", content: SYSTEM_PROMPT },
+          {
+            role: "user",
+            content: `Na základě tohoto popisu případu vytvoř strukturovanou lékařskou zprávu: ${prompt}`,
+          },
+        ],
+        response_format: { type: "json_object" },
+      })
+
+      text = completion.choices?.[0]?.message?.content ?? "{}"
+    } else if (provider === "claude") {
       if (!process.env.ANTHROPIC_API_KEY) {
         return NextResponse.json({ error: "Chybí ANTHROPIC_API_KEY v .env.local" }, { status: 500 })
       }
