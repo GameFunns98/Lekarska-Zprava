@@ -38,6 +38,28 @@ type ImportedFields = Partial<{
   icd10: string
 }>
 
+type ParsedImportResult = {
+  fields: ImportedFields
+  detectedTypeName: string
+}
+
+type HeaderFieldConfig = {
+  key: Exclude<keyof ImportedFields, "documentType">
+  headers: string[]
+}
+
+type BlockFieldConfig = {
+  key: Exclude<keyof ImportedFields, "documentType">
+  headers: string[]
+}
+
+type ParserProfile = {
+  typeName: string
+  documentType?: DocumentType
+  lineFields: HeaderFieldConfig[]
+  blockFields: BlockFieldConfig[]
+}
+
 const DEFAULT_FORM_VALUES = {
   reportTypeId: REPORT_TYPES[0].id as ReportTypeId,
   caseNumber: "001",
@@ -62,6 +84,50 @@ const DEFAULT_FORM_VALUES = {
   diagnosis: "",
   icd10: "",
   aiPrompt: "",
+}
+
+const VALID_DOCUMENT_TYPES = new Set(documentTypes.map((type) => type.value))
+const DOCUMENT_TYPE_LABELS = Object.fromEntries(documentTypes.map((type) => [type.value, type.label])) as Record<DocumentType, string>
+
+const STANDARD_PROFILE: ParserProfile = {
+  typeName: "Standardní zdravotní zpráva",
+  lineFields: [
+    { key: "patientBirthDate", headers: ["Datum narození:"] },
+    { key: "patientInsurance", headers: ["Pojišťovna:"] },
+    { key: "oa", headers: ["OA:"] },
+    { key: "ra", headers: ["RA:"] },
+    { key: "pa", headers: ["PA:"] },
+    { key: "sa", headers: ["SA:"] },
+    { key: "fa", headers: ["FA:"] },
+    { key: "aa", headers: ["AA:"] },
+    { key: "ea", headers: ["EA:"] },
+    { key: "no", headers: ["NO:"] },
+    { key: "vf", headers: ["VF:"] },
+    { key: "subj", headers: ["Subj.:"] },
+    { key: "obj", headers: ["Obj.:"] },
+    { key: "diagnosis", headers: ["Diagnóza:"] },
+    { key: "icd10", headers: ["MKN-10 kód:"] },
+  ],
+  blockFields: [
+    { key: "examination", headers: ["Vyšetření:"] },
+    { key: "therapy", headers: ["Terapie:"] },
+    { key: "doctorName", headers: ["Zapsal:"] },
+  ],
+}
+
+const PSYCHOLOGY_PROFILE: ParserProfile = {
+  typeName: "Psychologická zpráva",
+  lineFields: [
+    { key: "patientBirthDate", headers: ["Datum narození:"] },
+    { key: "patientInsurance", headers: ["Pojišťovna:"] },
+  ],
+  blockFields: [
+    { key: "obj", headers: ["Extrospekce:"] },
+    { key: "diagnosis", headers: ["Hlavní závěry:"] },
+    { key: "therapy", headers: ["Resumé, doporučení:"] },
+    { key: "examination", headers: ["Psychologické zařazení kandidáta:"] },
+    { key: "doctorName", headers: ["Zapsal:"] },
+  ],
 }
 
 export default function MedicalReportApp() {
@@ -170,7 +236,7 @@ export default function MedicalReportApp() {
     localStorage.removeItem("medicalReportDraft")
   }
 
-  const parseImportedReport = (rawText: string): ImportedFields => {
+  const parseImportedReport = (rawText: string, selectedDocumentType?: DocumentType): ParsedImportResult => {
     const text = rawText.replace(/\r\n/g, "\n")
     const lines = text.split("\n")
     const trimmedLines = lines.map((line) => line.trim())
@@ -186,17 +252,25 @@ export default function MedicalReportApp() {
       }
     }
 
-    const readLineValue = (prefix: string): string => {
-      const line = trimmedLines.find((candidate) => candidate.startsWith(prefix))
-      return line ? line.slice(prefix.length).trim() : ""
+    const readLineValue = (prefixes: string[]): string => {
+      for (const prefix of prefixes) {
+        const line = trimmedLines.find((candidate) => candidate.startsWith(prefix))
+        if (line) return line.slice(prefix.length).trim()
+      }
+      return ""
     }
 
-    const readBlock = (startHeader: string, endHeaders: string[]) => {
-      const startIndex = trimmedLines.findIndex((line) => line === startHeader)
+    const allKnownHeaders = [
+      ...STANDARD_PROFILE.blockFields.flatMap((field) => field.headers),
+      ...PSYCHOLOGY_PROFILE.blockFields.flatMap((field) => field.headers),
+    ]
+
+    const readBlock = (startHeaders: string[]) => {
+      const startIndex = trimmedLines.findIndex((line) => startHeaders.includes(line))
       if (startIndex === -1) return ""
 
       let endIndex = trimmedLines.length
-      for (const header of endHeaders) {
+      for (const header of allKnownHeaders) {
         const candidateEnd = trimmedLines.findIndex((line, index) => index > startIndex && line === header)
         if (candidateEnd !== -1 && candidateEnd < endIndex) {
           endIndex = candidateEnd
@@ -206,31 +280,52 @@ export default function MedicalReportApp() {
       return lines.slice(startIndex + 1, endIndex).join("\n").trim()
     }
 
-    const importRules = REPORT_TYPES_BY_ID[parsed.reportTypeId || DEFAULT_FORM_VALUES.reportTypeId].importRules
-    for (const [linePrefix, key] of Object.entries(importRules.lineMappings)) {
-      const value = readLineValue(linePrefix)
-      if (!value) continue
-      if (key === "patientFullName") {
-        const [firstName, ...lastNameParts] = value.split(/\s+/)
-        if (firstName) parsed.patientFirstName = firstName
-        if (lastNameParts.length > 0) parsed.patientLastName = lastNameParts.join(" ")
-        continue
+    const hasPsychologyHeaders = [
+      "Identifikace klienta:",
+      "Extrospekce:",
+      "Hlavní závěry:",
+      "Resumé, doporučení:",
+      "Psychologické zařazení kandidáta:",
+    ].some((header) => trimmedLines.includes(header))
+
+    const activeProfile = hasPsychologyHeaders ? PSYCHOLOGY_PROFILE : STANDARD_PROFILE
+
+    if (!parsed.documentType && selectedDocumentType && VALID_DOCUMENT_TYPES.has(selectedDocumentType)) {
+      parsed.documentType = selectedDocumentType
+    }
+
+    const fullName = readLineValue(["Jméno a příjmení:"])
+    if (fullName) {
+      const [firstName, ...lastNameParts] = fullName.split(/\s+/)
+      if (firstName) parsed.patientFirstName = firstName
+      if (lastNameParts.length > 0) parsed.patientLastName = lastNameParts.join(" ")
+    }
+
+    for (const lineField of activeProfile.lineFields) {
+      const value = readLineValue(lineField.headers)
+      if (value) parsed[lineField.key] = value
+    }
+
+    for (const blockField of activeProfile.blockFields) {
+      const value = readBlock(blockField.headers)
+      if (value) {
+        if (blockField.key === "doctorName") {
+          const [firstDoctorLine] = value
+            .split("\n")
+            .map((line) => line.trim())
+            .filter(Boolean)
+          if (firstDoctorLine) parsed.doctorName = firstDoctorLine
+        } else {
+          parsed[blockField.key] = value
+        }
       }
-      parsed[key] = value
     }
 
-    for (const blockMapping of importRules.blockMappings) {
-      const blockValue = readBlock(blockMapping.startHeader, blockMapping.endHeaders)
-      if (blockValue) parsed[blockMapping.key] = blockValue
-    }
+    const detectedTypeName =
+      activeProfile.typeName +
+      (parsed.documentType ? ` (${DOCUMENT_TYPE_LABELS[parsed.documentType]})` : parsed.documentType === undefined && selectedDocumentType ? ` (${DOCUMENT_TYPE_LABELS[selectedDocumentType]})` : "")
 
-    const doctorBlock = readBlock(importRules.doctorHeader, [])
-    if (doctorBlock) {
-      const [firstDoctorLine] = doctorBlock.split("\n").map((line) => line.trim()).filter(Boolean)
-      if (firstDoctorLine) parsed.doctorName = firstDoctorLine
-    }
-
-    return parsed
+    return { fields: parsed, detectedTypeName }
   }
 
   useEffect(() => {
@@ -406,8 +501,8 @@ export default function MedicalReportApp() {
     reader.onload = () => {
       try {
         const rawText = typeof reader.result === "string" ? reader.result : ""
-        const parsed = parseImportedReport(rawText)
-        const parsedKeys = Object.keys(parsed)
+        const { fields, detectedTypeName } = parseImportedReport(rawText, documentType as DocumentType)
+        const parsedKeys = Object.keys(fields)
 
         if (parsedKeys.length === 0) {
           setImportStatus({
@@ -417,10 +512,10 @@ export default function MedicalReportApp() {
           return
         }
 
-        applyImportedFields(parsed)
+        applyImportedFields(fields)
         setImportStatus({
           type: "success",
-          message: `Import dokončen. Načteno ${parsedKeys.length} polí.`,
+          message: `Import dokončen (${detectedTypeName}). Načteno ${parsedKeys.length} polí.`,
         })
       } catch (error) {
         console.error("[Import] Error:", error)
