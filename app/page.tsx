@@ -11,19 +11,10 @@ import { FileText, Download, Sparkles, Copy, Check, WifiOff, Wifi, Save, Trash2,
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-
-const documentTypes = [
-  { value: "TR", label: "TR - Trauma / Resuscitace" },
-  { value: "EP", label: "EP - Epilepsie" },
-  { value: "CV", label: "CV - Cerebrovaskulární příhoda" },
-  { value: "ONC", label: "ONC - Onkologická diagnóza" },
-  { value: "INF", label: "INF - Infekce" },
-]
-
-type DocumentType = (typeof documentTypes)[number]["value"]
+import { REPORT_TYPES, REPORT_TYPES_BY_ID, type ReportData, type ReportFieldKey, type ReportTypeId } from "@/lib/report-types"
 
 type ImportedFields = Partial<{
-  documentType: DocumentType
+  reportTypeId: ReportTypeId
   caseNumber: string
   doctorName: string
   patientFirstName: string
@@ -48,7 +39,7 @@ type ImportedFields = Partial<{
 }>
 
 const DEFAULT_FORM_VALUES = {
-  documentType: "EP" as DocumentType,
+  reportTypeId: REPORT_TYPES[0].id as ReportTypeId,
   caseNumber: "001",
   doctorName: "MUDr. Fero Lakatos",
   patientFirstName: "",
@@ -73,8 +64,6 @@ const DEFAULT_FORM_VALUES = {
   aiPrompt: "",
 }
 
-const VALID_DOCUMENT_TYPES = new Set(documentTypes.map((type) => type.value))
-
 export default function MedicalReportApp() {
   const providerLabel: Record<"github" | "claude" | "openai" | "deepseek", string> = {
     github: "GitHub",
@@ -89,7 +78,7 @@ export default function MedicalReportApp() {
   const [showCopyModal, setShowCopyModal] = useState(false)
   const [importStatus, setImportStatus] = useState<{ type: "success" | "error"; message: string } | null>(null)
 
-  const [documentType, setDocumentType] = useState("EP")
+  const [reportTypeId, setReportTypeId] = useState<ReportTypeId>(DEFAULT_FORM_VALUES.reportTypeId)
   const [caseNumber, setCaseNumber] = useState("001")
   const [doctorName, setDoctorName] = useState("MUDr. Fero Lakatos")
   const [patientFirstName, setPatientFirstName] = useState("")
@@ -125,8 +114,10 @@ export default function MedicalReportApp() {
 
   const [aiPrompt, setAiPrompt] = useState("")
 
+  const activeReportType = REPORT_TYPES_BY_ID[reportTypeId]
+
   const applyImportedFields = (fields: ImportedFields) => {
-    if (fields.documentType) setDocumentType(fields.documentType)
+    if (fields.reportTypeId) setReportTypeId(fields.reportTypeId)
     if (fields.caseNumber) setCaseNumber(fields.caseNumber)
     if (fields.doctorName) setDoctorName(fields.doctorName)
     if (fields.patientFirstName) setPatientFirstName(fields.patientFirstName)
@@ -151,7 +142,7 @@ export default function MedicalReportApp() {
   }
 
   const resetAllFields = () => {
-    setDocumentType(DEFAULT_FORM_VALUES.documentType)
+    setReportTypeId(DEFAULT_FORM_VALUES.reportTypeId)
     setCaseNumber(DEFAULT_FORM_VALUES.caseNumber)
     setDoctorName(DEFAULT_FORM_VALUES.doctorName)
     setPatientFirstName(DEFAULT_FORM_VALUES.patientFirstName)
@@ -189,10 +180,8 @@ export default function MedicalReportApp() {
     if (firstContentLine) {
       const match = firstContentLine.match(/^([A-Z]+)_\d{6}\/(\d+)$/)
       if (match) {
-        const maybeType = match[1] as DocumentType
-        if (VALID_DOCUMENT_TYPES.has(maybeType)) {
-          parsed.documentType = maybeType
-        }
+        const found = REPORT_TYPES.find((type) => type.documentPrefix === match[1])
+        if (found) parsed.reportTypeId = found.id
         parsed.caseNumber = match[2]
       }
     }
@@ -217,54 +206,25 @@ export default function MedicalReportApp() {
       return lines.slice(startIndex + 1, endIndex).join("\n").trim()
     }
 
-    const fullName = readLineValue("Jméno a příjmení:")
-    if (fullName) {
-      const [firstName, ...lastNameParts] = fullName.split(/\s+/)
-      if (firstName) parsed.patientFirstName = firstName
-      if (lastNameParts.length > 0) parsed.patientLastName = lastNameParts.join(" ")
+    const importRules = REPORT_TYPES_BY_ID[parsed.reportTypeId || DEFAULT_FORM_VALUES.reportTypeId].importRules
+    for (const [linePrefix, key] of Object.entries(importRules.lineMappings)) {
+      const value = readLineValue(linePrefix)
+      if (!value) continue
+      if (key === "patientFullName") {
+        const [firstName, ...lastNameParts] = value.split(/\s+/)
+        if (firstName) parsed.patientFirstName = firstName
+        if (lastNameParts.length > 0) parsed.patientLastName = lastNameParts.join(" ")
+        continue
+      }
+      parsed[key] = value
     }
 
-    const patientBirthDate = readLineValue("Datum narození:")
-    if (patientBirthDate) parsed.patientBirthDate = patientBirthDate
+    for (const blockMapping of importRules.blockMappings) {
+      const blockValue = readBlock(blockMapping.startHeader, blockMapping.endHeaders)
+      if (blockValue) parsed[blockMapping.key] = blockValue
+    }
 
-    const patientInsurance = readLineValue("Pojišťovna:")
-    if (patientInsurance) parsed.patientInsurance = patientInsurance
-
-    const oaValue = readLineValue("OA:")
-    if (oaValue) parsed.oa = oaValue
-    const raValue = readLineValue("RA:")
-    if (raValue) parsed.ra = raValue
-    const paValue = readLineValue("PA:")
-    if (paValue) parsed.pa = paValue
-    const saValue = readLineValue("SA:")
-    if (saValue) parsed.sa = saValue
-    const faValue = readLineValue("FA:")
-    if (faValue) parsed.fa = faValue
-    const aaValue = readLineValue("AA:")
-    if (aaValue) parsed.aa = aaValue
-    const eaValue = readLineValue("EA:")
-    if (eaValue) parsed.ea = eaValue
-    const noValue = readLineValue("NO:")
-    if (noValue) parsed.no = noValue
-
-    const vfValue = readLineValue("VF:")
-    if (vfValue) parsed.vf = vfValue
-    const subjValue = readLineValue("Subj.:")
-    if (subjValue) parsed.subj = subjValue
-    const objValue = readLineValue("Obj.:")
-    if (objValue) parsed.obj = objValue
-
-    const examinationBlock = readBlock("Vyšetření:", ["Terapie:"])
-    if (examinationBlock) parsed.examination = examinationBlock
-    const therapyBlock = readBlock("Terapie:", ["Závěrečné ustanovení:"])
-    if (therapyBlock) parsed.therapy = therapyBlock
-
-    const diagnosisValue = readLineValue("Diagnóza:")
-    if (diagnosisValue) parsed.diagnosis = diagnosisValue
-    const icd10Value = readLineValue("MKN-10 kód:")
-    if (icd10Value) parsed.icd10 = icd10Value
-
-    const doctorBlock = readBlock("Zapsal:", [])
+    const doctorBlock = readBlock(importRules.doctorHeader, [])
     if (doctorBlock) {
       const [firstDoctorLine] = doctorBlock.split("\n").map((line) => line.trim()).filter(Boolean)
       if (firstDoctorLine) parsed.doctorName = firstDoctorLine
@@ -293,7 +253,7 @@ export default function MedicalReportApp() {
     if (savedData) {
       try {
         const parsed = JSON.parse(savedData)
-        setDocumentType(parsed.documentType || DEFAULT_FORM_VALUES.documentType)
+        setReportTypeId(parsed.reportTypeId || DEFAULT_FORM_VALUES.reportTypeId)
         setCaseNumber(parsed.caseNumber || DEFAULT_FORM_VALUES.caseNumber)
         setDoctorName(parsed.doctorName || DEFAULT_FORM_VALUES.doctorName)
         setPatientFirstName(parsed.patientFirstName || "")
@@ -323,7 +283,7 @@ export default function MedicalReportApp() {
 
   useEffect(() => {
     const dataToSave = {
-      documentType,
+      reportTypeId,
       caseNumber,
       doctorName,
       patientFirstName,
@@ -353,7 +313,7 @@ export default function MedicalReportApp() {
     const timer = setTimeout(() => setAutoSaved(false), 1000)
     return () => clearTimeout(timer)
   }, [
-    documentType,
+    reportTypeId,
     caseNumber,
     doctorName,
     patientFirstName,
@@ -379,7 +339,7 @@ export default function MedicalReportApp() {
 
   const handleManualSave = () => {
     const dataToSave = {
-      documentType,
+      reportTypeId,
       caseNumber,
       doctorName,
       patientFirstName,
@@ -485,50 +445,35 @@ export default function MedicalReportApp() {
     const year = String(today.getFullYear()).slice(-2)
     const dateStr = `${day}${month}${year}`
     const caseStr = String(caseNumber).padStart(3, "0")
-    return `${documentType}_${dateStr}/${caseStr}`
+    return `${activeReportType.documentPrefix}_${dateStr}/${caseStr}`
   }
 
   const generateReport = () => {
     const documentName = generateDocumentName()
-    const patientFullName = [patientFirstName, patientLastName].filter(Boolean).join(" ")
-
-    return `${documentName}
-
-ZÁZNAM DO DOKUMENTACE
-
-Identifikace pacienta:
-${patientFullName ? `Jméno a příjmení: ${patientFullName}` : ""}
-${patientBirthDate ? `Datum narození: ${patientBirthDate}` : ""}
-${patientInsurance ? `Pojišťovna: ${patientInsurance}` : ""}
-
-Anamnéza:
-${oa ? `OA: ${oa}` : ""}
-${ra ? `RA: ${ra}` : ""}
-${pa ? `PA: ${pa}` : ""}
-${sa ? `SA: ${sa}` : ""}
-${fa ? `FA: ${fa}` : ""}
-${aa ? `AA: ${aa}` : ""}
-${ea ? `EA: ${ea}` : ""}
-${no ? `NO: ${no}` : ""}
-
-Status praesens:
-${vf ? `VF: ${vf}` : ""}
-${subj ? `Subj.: ${subj}` : ""}
-${obj ? `Obj.: ${obj}` : ""}
-
-Vyšetření:
-${examination || ""}
-
-Terapie:
-${therapy || ""}
-
-Závěrečné ustanovení:
-Diagnóza: ${diagnosis || ""}
-MKN-10 kód: ${icd10 || ""}
-
-Zapsal:
-${doctorName}
-`
+    const reportData: ReportData = {
+      caseNumber,
+      doctorName,
+      patientFirstName,
+      patientLastName,
+      patientBirthDate,
+      patientInsurance,
+      oa,
+      ra,
+      pa,
+      sa,
+      fa,
+      aa,
+      ea,
+      no,
+      vf,
+      subj,
+      obj,
+      examination,
+      therapy,
+      diagnosis,
+      icd10,
+    }
+    return activeReportType.buildPreviewExport(documentName, reportData)
   }
 
 const handleAiAssist = async () => {
@@ -618,6 +563,56 @@ const handleAiAssist = async () => {
     a.click()
     document.body.removeChild(a)
     URL.revokeObjectURL(url)
+  }
+
+  const getFieldValue = (key: ReportFieldKey): string => {
+    const values: Record<ReportFieldKey, string> = {
+      patientFirstName,
+      patientLastName,
+      patientBirthDate,
+      patientInsurance,
+      oa,
+      ra,
+      pa,
+      sa,
+      fa,
+      aa,
+      ea,
+      no,
+      vf,
+      subj,
+      obj,
+      examination,
+      therapy,
+      diagnosis,
+      icd10,
+    }
+    return values[key]
+  }
+
+  const setFieldValue = (key: ReportFieldKey, value: string) => {
+    const setters: Record<ReportFieldKey, (next: string) => void> = {
+      patientFirstName: setPatientFirstName,
+      patientLastName: setPatientLastName,
+      patientBirthDate: setPatientBirthDate,
+      patientInsurance: setPatientInsurance,
+      oa: setOa,
+      ra: setRa,
+      pa: setPa,
+      sa: setSa,
+      fa: setFa,
+      aa: setAa,
+      ea: setEa,
+      no: setNo,
+      vf: setVf,
+      subj: setSubj,
+      obj: setObj,
+      examination: setExamination,
+      therapy: setTherapy,
+      diagnosis: setDiagnosis,
+      icd10: setIcd10,
+    }
+    setters[key](value)
   }
 
   return (
@@ -772,14 +767,14 @@ const handleAiAssist = async () => {
                 </div>
 
                 <div>
-                  <Label htmlFor="doc-type">Typ dokumentu</Label>
-                  <Select value={documentType} onValueChange={setDocumentType}>
+                  <Label htmlFor="doc-type">Typ zprávy</Label>
+                  <Select value={reportTypeId} onValueChange={(value) => setReportTypeId(value as ReportTypeId)}>
                     <SelectTrigger id="doc-type">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {documentTypes.map((type) => (
-                        <SelectItem key={type.value} value={type.value}>
+                      {REPORT_TYPES.map((type) => (
+                        <SelectItem key={type.id} value={type.id}>
                           {type.label}
                         </SelectItem>
                       ))}
@@ -857,122 +852,44 @@ const handleAiAssist = async () => {
             {/* Form Tabs */}
             <Card>
               <CardContent className="pt-6">
-                <Tabs defaultValue="anamneza">
-                  <TabsList className="grid grid-cols-4 w-full">
-                    <TabsTrigger value="anamneza">Anamnéza</TabsTrigger>
-                    <TabsTrigger value="status">Status</TabsTrigger>
-                    <TabsTrigger value="vysetreni">Vyšetření</TabsTrigger>
-                    <TabsTrigger value="zaver">Závěr</TabsTrigger>
+                <Tabs defaultValue={activeReportType.formSections[0]?.id}>
+                  <TabsList className={`grid w-full`} style={{ gridTemplateColumns: `repeat(${activeReportType.formSections.length}, minmax(0, 1fr))` }}>
+                    {activeReportType.formSections.map((section) => (
+                      <TabsTrigger key={section.id} value={section.id}>
+                        {section.label}
+                      </TabsTrigger>
+                    ))}
                   </TabsList>
 
-                  <TabsContent value="anamneza" className="space-y-4 mt-4">
-                    <div>
-                      <Label htmlFor="oa">OA - Osobní anamnéza</Label>
-                      <Textarea id="oa" value={oa} onChange={(e) => setOa(e.target.value)} />
-                    </div>
-                    <div>
-                      <Label htmlFor="ra">RA - Rodinná anamnéza</Label>
-                      <Textarea id="ra" value={ra} onChange={(e) => setRa(e.target.value)} />
-                    </div>
-                    <div>
-                      <Label htmlFor="pa">PA - Pandemiologická anamnéza</Label>
-                      <Textarea id="pa" value={pa} onChange={(e) => setPa(e.target.value)} />
-                    </div>
-                    <div>
-                      <Label htmlFor="sa">SA - Sociální anamnéza</Label>
-                      <Textarea id="sa" value={sa} onChange={(e) => setSa(e.target.value)} />
-                    </div>
-                    <div>
-                      <Label htmlFor="fa">FA - Farmakologická anamnéza</Label>
-                      <Textarea id="fa" value={fa} onChange={(e) => setFa(e.target.value)} />
-                    </div>
-                    <div>
-                      <Label htmlFor="aa">AA - Anamnéza alergií</Label>
-                      <Textarea id="aa" value={aa} onChange={(e) => setAa(e.target.value)} />
-                    </div>
-                    <div>
-                      <Label htmlFor="ea">EA - Expozice a faktory prostředí</Label>
-                      <Textarea id="ea" value={ea} onChange={(e) => setEa(e.target.value)} />
-                    </div>
-                    <div>
-                      <Label htmlFor="no">NO - Nynější onemocnění</Label>
-                      <Textarea id="no" value={no} onChange={(e) => setNo(e.target.value)} />
-                    </div>
-                  </TabsContent>
-
-                  <TabsContent value="status" className="space-y-4 mt-4">
-                    <div>
-                      <Label htmlFor="vf">VF - Vital signs (životní funkce)</Label>
-                      <Textarea
-                        id="vf"
-                        value={vf}
-                        onChange={(e) => setVf(e.target.value)}
-                        placeholder="Např: Tlak 120/80 mmHg, puls 72 bpm, teplota 36.6°C"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="subj">Subj. - Subjektivní hodnocení</Label>
-                      <Textarea
-                        id="subj"
-                        value={subj}
-                        onChange={(e) => setSubj(e.target.value)}
-                        placeholder="Subjektivní stížnosti a pocity pacienta"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="obj">Obj. - Objektivní zjištění</Label>
-                      <Textarea
-                        id="obj"
-                        value={obj}
-                        onChange={(e) => setObj(e.target.value)}
-                        placeholder="Objektivní vyšetření a nálezy"
-                      />
-                    </div>
-                  </TabsContent>
-
-                  <TabsContent value="vysetreni" className="space-y-4 mt-4">
-                    <div>
-                      <Label htmlFor="examination">Vyšetření</Label>
-                      <Textarea
-                        id="examination"
-                        value={examination}
-                        onChange={(e) => setExamination(e.target.value)}
-                        className="min-h-[150px]"
-                        placeholder="Provedená vyšetření a jejich výsledky"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="therapy">Terapie</Label>
-                      <Textarea
-                        id="therapy"
-                        value={therapy}
-                        onChange={(e) => setTherapy(e.target.value)}
-                        className="min-h-[150px]"
-                        placeholder="Předepsaná nebo provedená léčba"
-                      />
-                    </div>
-                  </TabsContent>
-
-                  <TabsContent value="zaver" className="space-y-4 mt-4">
-                    <div>
-                      <Label htmlFor="diagnosis">Diagnóza</Label>
-                      <Input
-                        id="diagnosis"
-                        value={diagnosis}
-                        onChange={(e) => setDiagnosis(e.target.value)}
-                        placeholder="Např: Epilepsie, Generalizované tonicko-klonické záchvaty"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="icd10">MKN-10 kód</Label>
-                      <Input
-                        id="icd10"
-                        value={icd10}
-                        onChange={(e) => setIcd10(e.target.value)}
-                        placeholder="Např: G40.0"
-                      />
-                    </div>
-                  </TabsContent>
+                  {activeReportType.formSections.map((section) => (
+                    <TabsContent key={section.id} value={section.id} className="space-y-4 mt-4">
+                      {section.fields.map((field) => {
+                        const value = getFieldValue(field.key)
+                        const controlType = field.type ?? "textarea"
+                        return (
+                          <div key={field.key}>
+                            <Label htmlFor={field.key}>{field.label}</Label>
+                            {controlType === "input" ? (
+                              <Input
+                                id={field.key}
+                                value={value}
+                                onChange={(e) => setFieldValue(field.key, e.target.value)}
+                                placeholder={field.placeholder}
+                              />
+                            ) : (
+                              <Textarea
+                                id={field.key}
+                                value={value}
+                                onChange={(e) => setFieldValue(field.key, e.target.value)}
+                                className={field.minHeightClassName}
+                                placeholder={field.placeholder}
+                              />
+                            )}
+                          </div>
+                        )
+                      })}
+                    </TabsContent>
+                  ))}
                 </Tabs>
               </CardContent>
             </Card>
