@@ -11,7 +11,17 @@ import { FileText, Download, Sparkles, Copy, Check, WifiOff, Wifi, Save, Trash2,
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { REPORT_TYPES, REPORT_TYPES_BY_ID, type ReportData, type ReportFieldKey, type ReportTypeId } from "@/lib/report-types"
+
+const documentTypes = [
+  { value: "TR", label: "TR - Trauma / Resuscitace" },
+  { value: "EP", label: "EP - Epilepsie" },
+  { value: "CV", label: "CV - Cerebrovaskulární příhoda" },
+  { value: "ONC", label: "ONC - Onkologická diagnóza" },
+  { value: "INF", label: "INF - Infekce" },
+  { value: "PSY", label: "PSY - Psychologické vyšetření" },
+]
+
+type DocumentType = (typeof documentTypes)[number]["value"]
 
 type ImportedFields = Partial<{
   reportTypeId: ReportTypeId
@@ -112,7 +122,7 @@ export default function MedicalReportApp() {
   const [showCopyModal, setShowCopyModal] = useState(false)
   const [importStatus, setImportStatus] = useState<{ type: "success" | "error"; message: string } | null>(null)
 
-  const [documentType, setDocumentType] = useState<DocumentType>(DEFAULT_FORM_VALUES.documentType)
+  const [documentType, setDocumentType] = useState<DocumentType>("EP")
   const [caseNumber, setCaseNumber] = useState("001")
   const [doctorName, setDoctorName] = useState("MUDr. Fero Lakatos")
   const [patientFirstName, setPatientFirstName] = useState("")
@@ -253,12 +263,7 @@ export default function MedicalReportApp() {
       return ""
     }
 
-    const allKnownHeaders = [
-      ...STANDARD_PROFILE.blockFields.flatMap((field) => field.headers),
-      ...PSYCHOLOGY_PROFILE.blockFields.flatMap((field) => field.headers),
-    ]
-
-    const readBlock = (startHeaders: string[]) => {
+    const readBlock = (startHeaders: string[], endHeaders: string[]) => {
       const startIndex = trimmedLines.findIndex((line) => startHeaders.includes(line))
       if (startIndex === -1) return ""
 
@@ -294,9 +299,56 @@ export default function MedicalReportApp() {
       if (lastNameParts.length > 0) parsed.patientLastName = lastNameParts.join(" ")
     }
 
-    for (const lineField of activeProfile.lineFields) {
-      const value = readLineValue(lineField.headers)
-      if (value) parsed[lineField.key] = value
+    const patientBirthDate = readLineValue("Datum narození:")
+    if (patientBirthDate) parsed.patientBirthDate = patientBirthDate
+
+    const patientInsurance = readLineValue("Pojišťovna:")
+    if (patientInsurance) parsed.patientInsurance = patientInsurance
+
+    const oaValue = readLineValue("OA:")
+    if (oaValue) parsed.oa = oaValue
+    const raValue = readLineValue("RA:")
+    if (raValue) parsed.ra = raValue
+    const paValue = readLineValue("PA:")
+    if (paValue) parsed.pa = paValue
+    const saValue = readLineValue("SA:")
+    if (saValue) parsed.sa = saValue
+    const faValue = readLineValue("FA:")
+    if (faValue) parsed.fa = faValue
+    const aaValue = readLineValue("AA:")
+    if (aaValue) parsed.aa = aaValue
+    const eaValue = readLineValue("EA:")
+    if (eaValue) parsed.ea = eaValue
+    const noValue = readLineValue("NO:")
+    if (noValue) parsed.no = noValue
+
+    const vfValue = readLineValue("VF:")
+    if (vfValue) parsed.vf = vfValue
+    const subjValue = readLineValue("Subj.:")
+    if (subjValue) parsed.subj = subjValue
+    const objValue = readLineValue("Obj.:")
+    if (objValue) parsed.obj = objValue
+
+    const examinationBlock = readBlock(
+      ["Vyšetření:", "Použité metody a výsledky vyšetření:"],
+      ["Terapie:", "Interpretace a doporučení:"],
+    )
+    if (examinationBlock) parsed.examination = examinationBlock
+    const therapyBlock = readBlock(
+      ["Terapie:", "Interpretace a doporučení:"],
+      ["Závěrečné ustanovení:", "Závěr psychologického vyšetření:"],
+    )
+    if (therapyBlock) parsed.therapy = therapyBlock
+
+    const diagnosisValue = readLineValue("Diagnóza:")
+    if (diagnosisValue) parsed.diagnosis = diagnosisValue
+    const icd10Value = readLineValue("MKN-10 kód:") || readLineValue("Klasifikační kód:")
+    if (icd10Value) parsed.icd10 = icd10Value
+
+    const doctorBlock = readBlock(["Zapsal:", "Zpracoval:"], [])
+    if (doctorBlock) {
+      const [firstDoctorLine] = doctorBlock.split("\n").map((line) => line.trim()).filter(Boolean)
+      if (firstDoctorLine) parsed.doctorName = firstDoctorLine
     }
 
     for (const blockField of activeProfile.blockFields) {
@@ -514,7 +566,7 @@ export default function MedicalReportApp() {
     return `${activeReportType.documentPrefix}_${dateStr}/${caseStr}`
   }
 
-  const generateReport = () => {
+  const generateMedicalReport = () => {
     const documentName = generateDocumentName()
     const reportData: ReportData = {
       caseNumber,
@@ -540,6 +592,58 @@ export default function MedicalReportApp() {
       icd10,
     }
     return activeReportType.buildPreviewExport(documentName, reportData)
+  }
+
+  const generatePsychologicalReport = () => {
+    const documentName = generateDocumentName()
+    const patientFullName = [patientFirstName, patientLastName].filter(Boolean).join(" ")
+
+    return `${documentName}
+
+ZÁVĚREČNÁ ZPRÁVA Z PSYCHODIAGNOSTICKÉHO VYŠETŘENÍ
+DŮVĚRNÝ MATERIÁL / DŮVĚRNÉ
+
+Identifikační údaje klienta:
+${patientFullName ? `Jméno a příjmení: ${patientFullName}` : ""}
+${patientBirthDate ? `Datum narození: ${patientBirthDate}` : ""}
+${patientInsurance ? `Pojišťovna: ${patientInsurance}` : ""}
+
+Anamnestické údaje:
+${oa ? `OA: ${oa}` : ""}
+${ra ? `RA: ${ra}` : ""}
+${pa ? `PA: ${pa}` : ""}
+${sa ? `SA: ${sa}` : ""}
+${fa ? `FA: ${fa}` : ""}
+${aa ? `AA: ${aa}` : ""}
+${ea ? `EA: ${ea}` : ""}
+${no ? `NO: ${no}` : ""}
+
+Průběh vyšetření a klinické pozorování:
+${vf ? `VF: ${vf}` : ""}
+${subj ? `Subj.: ${subj}` : ""}
+${obj ? `Obj.: ${obj}` : ""}
+
+Použité metody a výsledky vyšetření:
+${examination || ""}
+
+Interpretace a doporučení:
+${therapy || ""}
+
+Závěr psychologického vyšetření:
+Diagnóza: ${diagnosis || ""}
+Klasifikační kód: ${icd10 || ""}
+
+Zpracoval:
+${doctorName}
+`
+  }
+
+  const generateReport = () => {
+    if (documentType === "PSY") {
+      return generatePsychologicalReport()
+    }
+
+    return generateMedicalReport()
   }
 
 const handleAiAssist = async () => {
