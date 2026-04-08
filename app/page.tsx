@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -38,27 +38,30 @@ type ImportedFields = Partial<{
   icd10: string
 }>
 
-type ParsedImportResult = {
-  fields: ImportedFields
-  detectedTypeName: string
-}
-
-type HeaderFieldConfig = {
-  key: Exclude<keyof ImportedFields, "documentType">
-  headers: string[]
-}
-
-type BlockFieldConfig = {
-  key: Exclude<keyof ImportedFields, "documentType">
-  headers: string[]
-}
-
-type ParserProfile = {
-  typeName: string
-  documentType?: DocumentType
-  lineFields: HeaderFieldConfig[]
-  blockFields: BlockFieldConfig[]
-}
+type DraftPayload = Partial<{
+  documentType: DocumentType
+  caseNumber: string
+  doctorName: string
+  patientFirstName: string
+  patientLastName: string
+  patientBirthDate: string
+  patientInsurance: string
+  oa: string
+  ra: string
+  pa: string
+  sa: string
+  fa: string
+  aa: string
+  ea: string
+  no: string
+  vf: string
+  subj: string
+  obj: string
+  examination: string
+  therapy: string
+  diagnosis: string
+  icd10: string
+}>
 
 const DEFAULT_FORM_VALUES = {
   reportTypeId: REPORT_TYPES[0].id as ReportTypeId,
@@ -87,48 +90,13 @@ const DEFAULT_FORM_VALUES = {
 }
 
 const VALID_DOCUMENT_TYPES = new Set(documentTypes.map((type) => type.value))
-const DOCUMENT_TYPE_LABELS = Object.fromEntries(documentTypes.map((type) => [type.value, type.label])) as Record<DocumentType, string>
+const LOCAL_STORAGE_KEY_PREFIX = "reportDraft"
 
-const STANDARD_PROFILE: ParserProfile = {
-  typeName: "Standardní zdravotní zpráva",
-  lineFields: [
-    { key: "patientBirthDate", headers: ["Datum narození:"] },
-    { key: "patientInsurance", headers: ["Pojišťovna:"] },
-    { key: "oa", headers: ["OA:"] },
-    { key: "ra", headers: ["RA:"] },
-    { key: "pa", headers: ["PA:"] },
-    { key: "sa", headers: ["SA:"] },
-    { key: "fa", headers: ["FA:"] },
-    { key: "aa", headers: ["AA:"] },
-    { key: "ea", headers: ["EA:"] },
-    { key: "no", headers: ["NO:"] },
-    { key: "vf", headers: ["VF:"] },
-    { key: "subj", headers: ["Subj.:"] },
-    { key: "obj", headers: ["Obj.:"] },
-    { key: "diagnosis", headers: ["Diagnóza:"] },
-    { key: "icd10", headers: ["MKN-10 kód:"] },
-  ],
-  blockFields: [
-    { key: "examination", headers: ["Vyšetření:"] },
-    { key: "therapy", headers: ["Terapie:"] },
-    { key: "doctorName", headers: ["Zapsal:"] },
-  ],
-}
-
-const PSYCHOLOGY_PROFILE: ParserProfile = {
-  typeName: "Psychologická zpráva",
-  lineFields: [
-    { key: "patientBirthDate", headers: ["Datum narození:"] },
-    { key: "patientInsurance", headers: ["Pojišťovna:"] },
-  ],
-  blockFields: [
-    { key: "obj", headers: ["Extrospekce:"] },
-    { key: "diagnosis", headers: ["Hlavní závěry:"] },
-    { key: "therapy", headers: ["Resumé, doporučení:"] },
-    { key: "examination", headers: ["Psychologické zařazení kandidáta:"] },
-    { key: "doctorName", headers: ["Zapsal:"] },
-  ],
-}
+const getDraftStorageKey = (type: DocumentType) => `${LOCAL_STORAGE_KEY_PREFIX}:${type}`
+const getDefaultValuesForType = (type: DocumentType) => ({
+  ...DEFAULT_FORM_VALUES,
+  documentType: type,
+})
 
 export default function MedicalReportApp() {
   const providerLabel: Record<"github" | "claude" | "openai" | "deepseek", string> = {
@@ -144,7 +112,7 @@ export default function MedicalReportApp() {
   const [showCopyModal, setShowCopyModal] = useState(false)
   const [importStatus, setImportStatus] = useState<{ type: "success" | "error"; message: string } | null>(null)
 
-  const [reportTypeId, setReportTypeId] = useState<ReportTypeId>(DEFAULT_FORM_VALUES.reportTypeId)
+  const [documentType, setDocumentType] = useState<DocumentType>(DEFAULT_FORM_VALUES.documentType)
   const [caseNumber, setCaseNumber] = useState("001")
   const [doctorName, setDoctorName] = useState("MUDr. Fero Lakatos")
   const [patientFirstName, setPatientFirstName] = useState("")
@@ -179,11 +147,15 @@ export default function MedicalReportApp() {
   const [icd10, setIcd10] = useState("")
 
   const [aiPrompt, setAiPrompt] = useState("")
+  const skipNextTypeDraftLoadRef = useRef(false)
 
   const activeReportType = REPORT_TYPES_BY_ID[reportTypeId]
 
   const applyImportedFields = (fields: ImportedFields) => {
-    if (fields.reportTypeId) setReportTypeId(fields.reportTypeId)
+    if (fields.documentType) {
+      skipNextTypeDraftLoadRef.current = true
+      setDocumentType(fields.documentType)
+    }
     if (fields.caseNumber) setCaseNumber(fields.caseNumber)
     if (fields.doctorName) setDoctorName(fields.doctorName)
     if (fields.patientFirstName) setPatientFirstName(fields.patientFirstName)
@@ -207,33 +179,54 @@ export default function MedicalReportApp() {
     if (fields.icd10) setIcd10(fields.icd10)
   }
 
-  const resetAllFields = () => {
-    setReportTypeId(DEFAULT_FORM_VALUES.reportTypeId)
-    setCaseNumber(DEFAULT_FORM_VALUES.caseNumber)
-    setDoctorName(DEFAULT_FORM_VALUES.doctorName)
-    setPatientFirstName(DEFAULT_FORM_VALUES.patientFirstName)
-    setPatientLastName(DEFAULT_FORM_VALUES.patientLastName)
-    setPatientBirthDate(DEFAULT_FORM_VALUES.patientBirthDate)
-    setPatientInsurance(DEFAULT_FORM_VALUES.patientInsurance)
-    setOa(DEFAULT_FORM_VALUES.oa)
-    setRa(DEFAULT_FORM_VALUES.ra)
-    setPa(DEFAULT_FORM_VALUES.pa)
-    setSa(DEFAULT_FORM_VALUES.sa)
-    setFa(DEFAULT_FORM_VALUES.fa)
-    setAa(DEFAULT_FORM_VALUES.aa)
-    setEa(DEFAULT_FORM_VALUES.ea)
-    setNo(DEFAULT_FORM_VALUES.no)
-    setVf(DEFAULT_FORM_VALUES.vf)
-    setSubj(DEFAULT_FORM_VALUES.subj)
-    setObj(DEFAULT_FORM_VALUES.obj)
-    setExamination(DEFAULT_FORM_VALUES.examination)
-    setTherapy(DEFAULT_FORM_VALUES.therapy)
-    setDiagnosis(DEFAULT_FORM_VALUES.diagnosis)
-    setIcd10(DEFAULT_FORM_VALUES.icd10)
-    setAiPrompt(DEFAULT_FORM_VALUES.aiPrompt)
+  const applyFormValues = (values: DraftPayload) => {
+    setCaseNumber(values.caseNumber || DEFAULT_FORM_VALUES.caseNumber)
+    setDoctorName(values.doctorName || DEFAULT_FORM_VALUES.doctorName)
+    setPatientFirstName(values.patientFirstName || "")
+    setPatientLastName(values.patientLastName || "")
+    setPatientBirthDate(values.patientBirthDate || "")
+    setPatientInsurance(values.patientInsurance || "")
+    setOa(values.oa || "")
+    setRa(values.ra || "")
+    setPa(values.pa || "")
+    setSa(values.sa || "")
+    setFa(values.fa || "")
+    setAa(values.aa || "")
+    setEa(values.ea || "")
+    setNo(values.no || "")
+    setVf(values.vf || "")
+    setSubj(values.subj || "")
+    setObj(values.obj || "")
+    setExamination(values.examination || "")
+    setTherapy(values.therapy || "")
+    setDiagnosis(values.diagnosis || "")
+    setIcd10(values.icd10 || "")
+  }
+
+  const resetAllFields = (type: DocumentType = documentType) => {
+    const defaults = getDefaultValuesForType(type)
+    setDocumentType(defaults.documentType)
+    applyFormValues(defaults)
+    setAiPrompt(defaults.aiPrompt)
     setCopied(false)
     setImportStatus(null)
-    localStorage.removeItem("medicalReportDraft")
+    localStorage.removeItem(getDraftStorageKey(type))
+  }
+
+  const loadDraftForType = (type: DocumentType) => {
+    const savedData = localStorage.getItem(getDraftStorageKey(type))
+    if (!savedData) {
+      applyFormValues(getDefaultValuesForType(type))
+      return
+    }
+
+    try {
+      const parsed = JSON.parse(savedData) as DraftPayload
+      applyFormValues(parsed)
+    } catch (error) {
+      console.error("[v0] Error loading saved data:", error)
+      applyFormValues(getDefaultValuesForType(type))
+    }
   }
 
   const parseImportedReport = (rawText: string, selectedDocumentType?: DocumentType): ParsedImportResult => {
@@ -344,41 +337,19 @@ export default function MedicalReportApp() {
   }, [])
 
   useEffect(() => {
-    const savedData = localStorage.getItem("medicalReportDraft")
-    if (savedData) {
-      try {
-        const parsed = JSON.parse(savedData)
-        setReportTypeId(parsed.reportTypeId || DEFAULT_FORM_VALUES.reportTypeId)
-        setCaseNumber(parsed.caseNumber || DEFAULT_FORM_VALUES.caseNumber)
-        setDoctorName(parsed.doctorName || DEFAULT_FORM_VALUES.doctorName)
-        setPatientFirstName(parsed.patientFirstName || "")
-        setPatientLastName(parsed.patientLastName || "")
-        setPatientBirthDate(parsed.patientBirthDate || "")
-        setPatientInsurance(parsed.patientInsurance || "")
-        setOa(parsed.oa || "")
-        setRa(parsed.ra || "")
-        setPa(parsed.pa || "")
-        setSa(parsed.sa || "")
-        setFa(parsed.fa || "")
-        setAa(parsed.aa || "")
-        setEa(parsed.ea || "")
-        setNo(parsed.no || "")
-        setVf(parsed.vf || "")
-        setSubj(parsed.subj || "")
-        setObj(parsed.obj || "")
-        setExamination(parsed.examination || "")
-        setTherapy(parsed.therapy || "")
-        setDiagnosis(parsed.diagnosis || "")
-        setIcd10(parsed.icd10 || "")
-      } catch (error) {
-        console.error("[v0] Error loading saved data:", error)
-      }
-    }
+    loadDraftForType(DEFAULT_FORM_VALUES.documentType)
   }, [])
 
   useEffect(() => {
+    if (skipNextTypeDraftLoadRef.current) {
+      skipNextTypeDraftLoadRef.current = false
+      return
+    }
+    loadDraftForType(documentType)
+  }, [documentType])
+
+  useEffect(() => {
     const dataToSave = {
-      reportTypeId,
       caseNumber,
       doctorName,
       patientFirstName,
@@ -402,7 +373,7 @@ export default function MedicalReportApp() {
       icd10,
     }
 
-    localStorage.setItem("medicalReportDraft", JSON.stringify(dataToSave))
+    localStorage.setItem(getDraftStorageKey(documentType), JSON.stringify(dataToSave))
 
     setAutoSaved(true)
     const timer = setTimeout(() => setAutoSaved(false), 1000)
@@ -458,7 +429,7 @@ export default function MedicalReportApp() {
       icd10,
       savedAt: new Date().toISOString(),
     }
-    localStorage.setItem("medicalReportDraft", JSON.stringify(dataToSave))
+    localStorage.setItem(getDraftStorageKey(documentType), JSON.stringify(dataToSave))
     setAutoSaved(true)
     setTimeout(() => setAutoSaved(false), 2000)
   }
