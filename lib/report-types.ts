@@ -164,7 +164,7 @@ export const REPORT_TYPES: ReportTypeConfig[] = [
         fields: [
           { key: "oa", label: "OA - Osobní anamnéza" },
           { key: "ra", label: "RA - Rodinná anamnéza" },
-          { key: "pa", label: "PA - Pandemiologická anamnéza" },
+          { key: "pa", label: "PA - Pracovní anamnéza" },
           { key: "sa", label: "SA - Sociální anamnéza" },
           { key: "fa", label: "FA - Farmakologická anamnéza" },
           { key: "aa", label: "AA - Anamnéza alergií" },
