@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { REPORT_TYPES, REPORT_TYPES_BY_ID, type ReportData, type ReportFieldKey, type ReportTypeId } from "@/lib/report-types"
+import { useReportCheckStream } from "@/lib/use-report-check-stream"
 import { Check, Copy, Download, FileText, Save, Sparkles, Trash2, Upload, Wifi, WifiOff } from "lucide-react"
 
 type ImportedFields = Partial<ReportData & { reportTypeId: ReportTypeId }>
@@ -93,6 +94,16 @@ export default function MedicalReportApp() {
 
   const [aiPrompt, setAiPrompt] = useState("")
   const skipNextTypeDraftLoadRef = useRef(false)
+  const {
+    issues: reportCheckIssues,
+    icd10Suggestions,
+    progress: reportCheckProgress,
+    summary: reportCheckSummary,
+    running: isCheckingReport,
+    errorMessage: reportCheckError,
+    start: startReportCheck,
+    cancel: cancelReportCheck,
+  } = useReportCheckStream()
 
   const activeReportType = REPORT_TYPES_BY_ID[reportTypeId]
 
@@ -404,6 +415,30 @@ export default function MedicalReportApp() {
     return activeReportType.buildPreviewExport(generateDocumentName(), reportData)
   }
 
+  const getReportFieldsPayload = () => ({
+    caseNumber,
+    doctorName,
+    patientFirstName,
+    patientLastName,
+    patientBirthDate,
+    patientInsurance,
+    oa,
+    ra,
+    pa,
+    sa,
+    fa,
+    aa,
+    ea,
+    no,
+    vf,
+    subj,
+    obj,
+    examination,
+    therapy,
+    diagnosis,
+    icd10,
+  })
+
   const handleAiAssist = async () => {
     if (!aiPrompt.trim()) return
     if (!isOnline) {
@@ -635,6 +670,72 @@ export default function MedicalReportApp() {
                     document.body.removeChild(a)
                     URL.revokeObjectURL(url)
                   }} className="flex-1"><Download className="w-4 h-4 mr-2" />Stáhnout</Button>
+                </div>
+                <div className="mt-4 space-y-3 border rounded-lg p-4 bg-muted/30">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      variant="secondary"
+                      onClick={() => startReportCheck({ reportType: reportTypeId, strictMode: true, fields: getReportFieldsPayload() })}
+                      disabled={isCheckingReport}
+                    >
+                      {isCheckingReport ? "Probíhá kontrola..." : "Zkontrolovat zprávu"}
+                    </Button>
+                    {isCheckingReport && (
+                      <Button variant="outline" onClick={cancelReportCheck}>Zrušit</Button>
+                    )}
+                    <Badge variant="outline">Průběh: {reportCheckProgress.percent}%</Badge>
+                  </div>
+
+                  {reportCheckProgress.message && (
+                    <p className="text-sm text-muted-foreground">
+                      {reportCheckProgress.message}
+                    </p>
+                  )}
+
+                  {reportCheckError && (
+                    <p className="text-sm text-red-600">{reportCheckError}</p>
+                  )}
+
+                  {reportCheckSummary && (
+                    <div className="text-sm flex flex-wrap gap-2">
+                      <Badge variant={reportCheckSummary.hasBlockingErrors ? "destructive" : "secondary"}>
+                        Skóre: {reportCheckSummary.score}
+                      </Badge>
+                      <Badge variant="outline">Chyby: {reportCheckSummary.counts.error}</Badge>
+                      <Badge variant="outline">Upozornění: {reportCheckSummary.counts.warning}</Badge>
+                      <Badge variant="outline">Info: {reportCheckSummary.counts.info}</Badge>
+                    </div>
+                  )}
+
+                  {reportCheckIssues.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium">Nalezené problémy</p>
+                      {reportCheckIssues.map((issue) => (
+                        <div key={issue.id} className="rounded-md border p-3 bg-white dark:bg-gray-950">
+                          <div className="flex items-center gap-2">
+                            <Badge variant={issue.severity === "error" ? "destructive" : issue.severity === "warning" ? "secondary" : "outline"}>
+                              {issue.severity.toUpperCase()}
+                            </Badge>
+                            <span className="text-sm font-medium">{issue.title}</span>
+                          </div>
+                          <p className="text-sm mt-1">{issue.message}</p>
+                          {issue.suggestion && <p className="text-sm text-muted-foreground mt-1">Návrh: {issue.suggestion}</p>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {icd10Suggestions.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium">Návrhy MKN-10</p>
+                      {icd10Suggestions.map((item) => (
+                        <div key={`${item.code}-${item.reason}`} className="rounded-md border p-3 bg-white dark:bg-gray-950">
+                          <p className="text-sm font-medium">{item.code} — {item.label}</p>
+                          <p className="text-sm text-muted-foreground">{item.reason}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
