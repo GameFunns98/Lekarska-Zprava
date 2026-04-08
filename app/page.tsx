@@ -18,6 +18,7 @@ const documentTypes = [
   { value: "CV", label: "CV - Cerebrovaskulární příhoda" },
   { value: "ONC", label: "ONC - Onkologická diagnóza" },
   { value: "INF", label: "INF - Infekce" },
+  { value: "PSY", label: "PSY - Psychologické vyšetření" },
 ]
 
 type DocumentType = (typeof documentTypes)[number]["value"]
@@ -89,7 +90,7 @@ export default function MedicalReportApp() {
   const [showCopyModal, setShowCopyModal] = useState(false)
   const [importStatus, setImportStatus] = useState<{ type: "success" | "error"; message: string } | null>(null)
 
-  const [documentType, setDocumentType] = useState("EP")
+  const [documentType, setDocumentType] = useState<DocumentType>("EP")
   const [caseNumber, setCaseNumber] = useState("001")
   const [doctorName, setDoctorName] = useState("MUDr. Fero Lakatos")
   const [patientFirstName, setPatientFirstName] = useState("")
@@ -202,8 +203,8 @@ export default function MedicalReportApp() {
       return line ? line.slice(prefix.length).trim() : ""
     }
 
-    const readBlock = (startHeader: string, endHeaders: string[]) => {
-      const startIndex = trimmedLines.findIndex((line) => line === startHeader)
+    const readBlock = (startHeaders: string[], endHeaders: string[]) => {
+      const startIndex = trimmedLines.findIndex((line) => startHeaders.includes(line))
       if (startIndex === -1) return ""
 
       let endIndex = trimmedLines.length
@@ -254,17 +255,23 @@ export default function MedicalReportApp() {
     const objValue = readLineValue("Obj.:")
     if (objValue) parsed.obj = objValue
 
-    const examinationBlock = readBlock("Vyšetření:", ["Terapie:"])
+    const examinationBlock = readBlock(
+      ["Vyšetření:", "Použité metody a výsledky vyšetření:"],
+      ["Terapie:", "Interpretace a doporučení:"],
+    )
     if (examinationBlock) parsed.examination = examinationBlock
-    const therapyBlock = readBlock("Terapie:", ["Závěrečné ustanovení:"])
+    const therapyBlock = readBlock(
+      ["Terapie:", "Interpretace a doporučení:"],
+      ["Závěrečné ustanovení:", "Závěr psychologického vyšetření:"],
+    )
     if (therapyBlock) parsed.therapy = therapyBlock
 
     const diagnosisValue = readLineValue("Diagnóza:")
     if (diagnosisValue) parsed.diagnosis = diagnosisValue
-    const icd10Value = readLineValue("MKN-10 kód:")
+    const icd10Value = readLineValue("MKN-10 kód:") || readLineValue("Klasifikační kód:")
     if (icd10Value) parsed.icd10 = icd10Value
 
-    const doctorBlock = readBlock("Zapsal:", [])
+    const doctorBlock = readBlock(["Zapsal:", "Zpracoval:"], [])
     if (doctorBlock) {
       const [firstDoctorLine] = doctorBlock.split("\n").map((line) => line.trim()).filter(Boolean)
       if (firstDoctorLine) parsed.doctorName = firstDoctorLine
@@ -488,7 +495,7 @@ export default function MedicalReportApp() {
     return `${documentType}_${dateStr}/${caseStr}`
   }
 
-  const generateReport = () => {
+  const generateMedicalReport = () => {
     const documentName = generateDocumentName()
     const patientFullName = [patientFirstName, patientLastName].filter(Boolean).join(" ")
 
@@ -529,6 +536,58 @@ MKN-10 kód: ${icd10 || ""}
 Zapsal:
 ${doctorName}
 `
+  }
+
+  const generatePsychologicalReport = () => {
+    const documentName = generateDocumentName()
+    const patientFullName = [patientFirstName, patientLastName].filter(Boolean).join(" ")
+
+    return `${documentName}
+
+ZÁVĚREČNÁ ZPRÁVA Z PSYCHODIAGNOSTICKÉHO VYŠETŘENÍ
+DŮVĚRNÝ MATERIÁL / DŮVĚRNÉ
+
+Identifikační údaje klienta:
+${patientFullName ? `Jméno a příjmení: ${patientFullName}` : ""}
+${patientBirthDate ? `Datum narození: ${patientBirthDate}` : ""}
+${patientInsurance ? `Pojišťovna: ${patientInsurance}` : ""}
+
+Anamnestické údaje:
+${oa ? `OA: ${oa}` : ""}
+${ra ? `RA: ${ra}` : ""}
+${pa ? `PA: ${pa}` : ""}
+${sa ? `SA: ${sa}` : ""}
+${fa ? `FA: ${fa}` : ""}
+${aa ? `AA: ${aa}` : ""}
+${ea ? `EA: ${ea}` : ""}
+${no ? `NO: ${no}` : ""}
+
+Průběh vyšetření a klinické pozorování:
+${vf ? `VF: ${vf}` : ""}
+${subj ? `Subj.: ${subj}` : ""}
+${obj ? `Obj.: ${obj}` : ""}
+
+Použité metody a výsledky vyšetření:
+${examination || ""}
+
+Interpretace a doporučení:
+${therapy || ""}
+
+Závěr psychologického vyšetření:
+Diagnóza: ${diagnosis || ""}
+Klasifikační kód: ${icd10 || ""}
+
+Zpracoval:
+${doctorName}
+`
+  }
+
+  const generateReport = () => {
+    if (documentType === "PSY") {
+      return generatePsychologicalReport()
+    }
+
+    return generateMedicalReport()
   }
 
 const handleAiAssist = async () => {
