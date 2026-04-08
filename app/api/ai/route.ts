@@ -4,57 +4,9 @@ import { NextResponse } from "next/server"
 
 export const runtime = "nodejs"
 
-const SYSTEM_PROMPT =
-  "Jsi AI asistent pro lékařské zprávy v češtině. " +
-  "Vracíš POUZE validní JSON objekt bez markdownu a bez dalšího textu. " +
-  "Povolené klíče jsou přesně: patientFirstName, patientLastName, patientBirthDate, patientInsurance, oa, ra, pa, sa, fa, aa, ea, no, vf, subj, obj, examination, therapy, diagnosis, icd10. " +
-  "Každá hodnota musí být textový řetězec (string), stručný a klinicky relevantní; pokud údaj chybí, vrať prázdný string. " +
-  "NEVYMYŠLEJ identifikaci pacienta (jméno, datum narození, pojišťovna), pokud není v zadání. " +
-  "Význam klíčů: oa=osobní anamnéza, ra=rodinná anamnéza, pa=pandemiologická anamnéza, sa=sociální anamnéza, fa=farmakologická anamnéza, aa=alergologická anamnéza, ea=expozice/faktory prostředí, no=nynější onemocnění, vf=vitální funkce, subj=subjektivní potíže, obj=objektivní nález, examination=provedená vyšetření, therapy=léčba, diagnosis=diagnóza, icd10=MKN-10 kód. " +
-  "Do anamnestických polí nepatří jména lékařů ani kontaktní údaje. Pokud nevíš nějakou informaci ohledně anamnézy, vrať nezjištěno." +
-  "Když uživatel výslovně žádá ukázkový/demonstrativní příklad, vytvoř medicínsky smysluplný fiktivní obsah, ale patient* klíče ponech prázdné, pokud je uživatel nedal."
+type ReportType = "medical" | "psychological"
 
-const FIELD_KEYS: Array<keyof Fields> = [
-  "patientFirstName",
-  "patientLastName",
-  "patientBirthDate",
-  "patientInsurance",
-  "oa",
-  "ra",
-  "pa",
-  "sa",
-  "fa",
-  "aa",
-  "ea",
-  "no",
-  "vf",
-  "subj",
-  "obj",
-  "examination",
-  "therapy",
-  "diagnosis",
-  "icd10",
-]
-
-const normalizeFields = (value: unknown): Fields => {
-  const input = value && typeof value === "object" ? (value as Record<string, unknown>) : {}
-  const normalized: Fields = {}
-
-  for (const key of FIELD_KEYS) {
-    const raw = input[key]
-    if (typeof raw === "string") {
-      normalized[key] = raw.trim()
-    } else if (raw == null) {
-      normalized[key] = ""
-    } else {
-      normalized[key] = String(raw).trim()
-    }
-  }
-
-  return normalized
-}
-
-type Fields = {
+type MedicalFields = {
   patientFirstName?: string
   patientLastName?: string
   patientBirthDate?: string
@@ -76,11 +28,109 @@ type Fields = {
   icd10?: string
 }
 
+type PsychologicalFields = {
+  identifikace?: string
+  ucelVysetreni?: string
+  metody?: string
+  extrospekce?: string
+  testoveZavery?: string
+  doporuceni?: string
+  zarazeni?: string
+}
+
+type Fields = MedicalFields & PsychologicalFields
+
+const systemPromptByType: Record<ReportType, string> = {
+  medical:
+    "Jsi AI asistent pro lékařské zprávy v češtině. " +
+    "Vracíš POUZE validní JSON objekt bez markdownu a bez dalšího textu. " +
+    "Povolené klíče jsou přesně: patientFirstName, patientLastName, patientBirthDate, patientInsurance, oa, ra, pa, sa, fa, aa, ea, no, vf, subj, obj, examination, therapy, diagnosis, icd10. " +
+    "Každá hodnota musí být textový řetězec (string), stručný a klinicky relevantní; pokud údaj chybí, vrať prázdný string. " +
+    "NEVYMYŠLEJ identifikaci pacienta (jméno, datum narození, pojišťovna), pokud není v zadání. " +
+    "Význam klíčů: oa=osobní anamnéza, ra=rodinná anamnéza, pa=pandemiologická anamnéza, sa=sociální anamnéza, fa=farmakologická anamnéza, aa=alergologická anamnéza, ea=expozice/faktory prostředí, no=nynější onemocnění, vf=vitální funkce, subj=subjektivní potíže, obj=objektivní nález, examination=provedená vyšetření, therapy=léčba, diagnosis=diagnóza, icd10=MKN-10 kód. " +
+    "Do anamnestických polí nepatří jména lékařů ani kontaktní údaje. Pokud nevíš nějakou informaci ohledně anamnézy, vrať nezjištěno." +
+    "Když uživatel výslovně žádá ukázkový/demonstrativní příklad, vytvoř medicínsky smysluplný fiktivní obsah, ale patient* klíče ponech prázdné, pokud je uživatel nedal.",
+  psychological:
+    "Jsi AI asistent pro psychologické zprávy v češtině. " +
+    "Vracíš POUZE validní JSON objekt bez markdownu a bez dalšího textu. " +
+    "Povolené klíče jsou přesně: identifikace, ucelVysetreni, metody, extrospekce, testoveZavery, doporuceni, zarazeni. " +
+    "Každá hodnota musí být textový řetězec (string), stručný, profesionální a klinicky relevantní; pokud údaj chybí, vrať prázdný string. " +
+    "NEVYMYŠLEJ identifikační údaje osob, které nejsou v zadání. " +
+    "Význam klíčů: identifikace=základní identifikační údaje klienta/pacienta, ucelVysetreni=indikace a cíl vyšetření, metody=použité metody a nástroje, extrospekce=pozorované chování a projevy, testoveZavery=shrnutí výsledků testů, doporuceni=navržená doporučení, zarazeni=diagnostické či funkční zařazení. " +
+    "Když uživatel žádá ukázkový/demonstrativní příklad, vytvoř smysluplný fiktivní obsah.",
+}
+
+const fieldKeysByType: { [K in ReportType]: Array<keyof Fields> } = {
+  medical: [
+    "patientFirstName",
+    "patientLastName",
+    "patientBirthDate",
+    "patientInsurance",
+    "oa",
+    "ra",
+    "pa",
+    "sa",
+    "fa",
+    "aa",
+    "ea",
+    "no",
+    "vf",
+    "subj",
+    "obj",
+    "examination",
+    "therapy",
+    "diagnosis",
+    "icd10",
+  ],
+  psychological: ["identifikace", "ucelVysetreni", "metody", "extrospekce", "testoveZavery", "doporuceni", "zarazeni"],
+}
+
+const normalizeByKeys = (value: unknown, fieldKeys: Array<keyof Fields>): Fields => {
+  const input = value && typeof value === "object" ? (value as Record<string, unknown>) : {}
+  const normalized: Fields = {}
+
+  for (const key of fieldKeys) {
+    const raw = input[key]
+    if (typeof raw === "string") {
+      normalized[key] = raw.trim()
+    } else if (raw == null) {
+      normalized[key] = ""
+    } else {
+      normalized[key] = String(raw).trim()
+    }
+  }
+
+  return normalized
+}
+
+const normalizeFieldsByType: Record<ReportType, (value: unknown) => Fields> = {
+  medical: (value) => normalizeByKeys(value, fieldKeysByType.medical),
+  psychological: (value) => normalizeByKeys(value, fieldKeysByType.psychological),
+}
+
+const resolveReportType = (value: unknown): ReportType => {
+  const raw = (value ?? "").toString().trim().toLowerCase()
+
+  if (["psychological", "psychology", "psych", "psy", "psz", "psychologicky", "psychologická", "psychologicky_report"].includes(raw)) {
+    return "psychological"
+  }
+
+  return "medical"
+}
+
+const taskByType: Record<ReportType, string> = {
+  medical: "Na základě tohoto popisu případu vytvoř strukturovanou lékařskou zprávu",
+  psychological: "Na základě tohoto popisu případu vytvoř strukturovanou psychologickou zprávu",
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => null)
     const prompt = (body?.prompt ?? "").toString().trim()
     const provider = (body?.provider ?? "deepseek").toString().trim().toLowerCase()
+    const reportType = resolveReportType(body?.documentType)
+    const systemPrompt = systemPromptByType[reportType]
+    const normalizeFields = normalizeFieldsByType[reportType]
 
     if (!prompt) {
       return NextResponse.json({ error: "Chybí prompt." }, { status: 400 })
@@ -104,7 +154,7 @@ export async function POST(req: Request) {
         top_p: 0.9,
         max_tokens: 4096,
         messages: [
-          { role: "user", content: `${SYSTEM_PROMPT}\n\nNa základě tohoto popisu případu vytvoř strukturovanou lékařskou zprávu: ${prompt}` },
+          { role: "user", content: `${systemPrompt}\n\n${taskByType[reportType]}: ${prompt}` },
         ],
         stream: false,
       })
@@ -126,12 +176,12 @@ export async function POST(req: Request) {
           model: "claude-3-5-haiku-latest",
           temperature: 0.2,
           max_tokens: 1200,
-          system: SYSTEM_PROMPT,
+          system: systemPrompt,
           messages: [
             {
               role: "user",
               content:
-                `Na základě tohoto popisu případu vytvoř strukturovanou lékařskou zprávu: ${prompt}\n\n` +
+                `${taskByType[reportType]}: ${prompt}\n\n` +
                 "Vrať výstup pouze jako čistý JSON objekt bez markdownu.",
             },
           ],
@@ -168,10 +218,10 @@ export async function POST(req: Request) {
         model: "openai/gpt-4.1-mini",
         temperature: 0.2,
         messages: [
-          { role: "system", content: SYSTEM_PROMPT },
+          { role: "system", content: systemPrompt },
           {
             role: "user",
-            content: `Na základě tohoto popisu případu vytvoř strukturovanou lékařskou zprávu: ${prompt}`,
+            content: `${taskByType[reportType]}: ${prompt}`,
           },
         ],
         response_format: { type: "json_object" },
@@ -191,10 +241,10 @@ export async function POST(req: Request) {
         model: "gpt-4o-mini",
         temperature: 0.2,
         messages: [
-          { role: "system", content: SYSTEM_PROMPT },
+          { role: "system", content: systemPrompt },
           {
             role: "user",
-            content: `Na základě tohoto popisu případu vytvoř strukturovanou lékařskou zprávu: ${prompt}`,
+            content: `${taskByType[reportType]}: ${prompt}`,
           },
         ],
         response_format: { type: "json_object" },
