@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
+import { FarmakaHelper } from "@/components/farmaka-helper"
 import { REPORT_TYPES, REPORT_TYPES_BY_ID, type ReportData, type ReportFieldKey, type ReportTypeId } from "@/lib/report-types"
 import { useReportCheckStream } from "@/lib/use-report-check-stream"
 import { Check, Copy, Download, FileText, Save, Sparkles, Trash2, Upload, Wifi, WifiOff } from "lucide-react"
@@ -17,6 +18,15 @@ import { Check, Copy, Download, FileText, Save, Sparkles, Trash2, Upload, Wifi, 
 type ImportedFields = Partial<ReportData & { reportTypeId: ReportTypeId }>
 type DraftPayload = Partial<ReportData & { reportTypeId: ReportTypeId; savedAt: string }>
 type ParsedImportResult = { fields: ImportedFields; detectedTypeName: string }
+type EditableFieldKey =
+  | ReportFieldKey
+  | "caseNumber"
+  | "doctorName"
+  | "patientFirstName"
+  | "patientLastName"
+  | "patientBirthDate"
+  | "patientInsurance"
+  | "aiPrompt"
 
 const DEFAULT_FORM_VALUES: ReportData & { reportTypeId: ReportTypeId; aiPrompt: string } = {
   reportTypeId: REPORT_TYPES[0].id as ReportTypeId,
@@ -93,6 +103,7 @@ export default function MedicalReportApp() {
   const [icd10, setIcd10] = useState("")
 
   const [aiPrompt, setAiPrompt] = useState("")
+  const [activeField, setActiveField] = useState<EditableFieldKey>("therapy")
   const skipNextTypeDraftLoadRef = useRef(false)
   const {
     issues: reportCheckIssues,
@@ -542,6 +553,37 @@ export default function MedicalReportApp() {
     setters[key](value)
   }
 
+  const appendToField = (key: EditableFieldKey, text: string) => {
+    const append = (current: string) => (current ? `${current}\n${text}` : text)
+    const appendInline = (current: string) => (current ? `${current} ${text}` : text)
+
+    switch (key) {
+      case "caseNumber":
+        setCaseNumber(appendInline(caseNumber))
+        return
+      case "doctorName":
+        setDoctorName(appendInline(doctorName))
+        return
+      case "patientFirstName":
+        setPatientFirstName(appendInline(patientFirstName))
+        return
+      case "patientLastName":
+        setPatientLastName(appendInline(patientLastName))
+        return
+      case "patientBirthDate":
+        setPatientBirthDate(appendInline(patientBirthDate))
+        return
+      case "patientInsurance":
+        setPatientInsurance(appendInline(patientInsurance))
+        return
+      case "aiPrompt":
+        setAiPrompt(append(aiPrompt))
+        return
+      default:
+        setFieldValue(key, append(getFieldValue(key)))
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-gray-900 dark:to-gray-800 p-4 md:p-8">
       <div className="max-w-7xl mx-auto space-y-6">
@@ -573,7 +615,7 @@ export default function MedicalReportApp() {
             </div>
             <div>
               <Label htmlFor="ai-prompt">Popište případ pacienta</Label>
-              <Textarea id="ai-prompt" value={aiPrompt} onChange={(e) => setAiPrompt(e.target.value)} className="min-h-[100px]" disabled={!isOnline} />
+              <Textarea id="ai-prompt" value={aiPrompt} onFocus={() => setActiveField("aiPrompt")} onChange={(e) => setAiPrompt(e.target.value)} className="min-h-[100px]" disabled={!isOnline} />
             </div>
             <Button onClick={handleAiAssist} disabled={isGenerating || !aiPrompt.trim() || !isOnline} className="w-full bg-blue-600 hover:bg-blue-700">
               {isGenerating ? <> <Sparkles className="w-4 h-4 mr-2 animate-spin" /> Generuji zprávu přes {providerLabel[aiProvider]}... </> : <> <Sparkles className="w-4 h-4 mr-2" /> Vygenerovat zprávu pomocí {providerLabel[aiProvider]} </>}
@@ -610,20 +652,26 @@ export default function MedicalReportApp() {
                   </Select>
                 </div>
 
-                <div><Label htmlFor="case-number">Číslo případu dne</Label><Input id="case-number" type="number" min="1" value={caseNumber} onChange={(e) => setCaseNumber(e.target.value)} /></div>
-                <div><Label htmlFor="doctor">Jméno lékaře</Label><Input id="doctor" value={doctorName} onChange={(e) => setDoctorName(e.target.value)} /></div>
+                <div><Label htmlFor="case-number">Číslo případu dne</Label><Input id="case-number" type="number" min="1" value={caseNumber} onFocus={() => setActiveField("caseNumber")} onChange={(e) => setCaseNumber(e.target.value)} /></div>
+                <div><Label htmlFor="doctor">Jméno lékaře</Label><Input id="doctor" value={doctorName} onFocus={() => setActiveField("doctorName")} onChange={(e) => setDoctorName(e.target.value)} /></div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div><Label htmlFor="patient-first-name">Jméno pacienta</Label><Input id="patient-first-name" value={patientFirstName} onChange={(e) => setPatientFirstName(e.target.value)} /></div>
-                  <div><Label htmlFor="patient-last-name">Příjmení pacienta</Label><Input id="patient-last-name" value={patientLastName} onChange={(e) => setPatientLastName(e.target.value)} /></div>
+                  <div><Label htmlFor="patient-first-name">Jméno pacienta</Label><Input id="patient-first-name" value={patientFirstName} onFocus={() => setActiveField("patientFirstName")} onChange={(e) => setPatientFirstName(e.target.value)} /></div>
+                  <div><Label htmlFor="patient-last-name">Příjmení pacienta</Label><Input id="patient-last-name" value={patientLastName} onFocus={() => setActiveField("patientLastName")} onChange={(e) => setPatientLastName(e.target.value)} /></div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div><Label htmlFor="patient-birth-date">Datum narození</Label><Input id="patient-birth-date" type="date" value={patientBirthDate} onChange={(e) => setPatientBirthDate(e.target.value)} /></div>
-                  <div><Label htmlFor="patient-insurance">Pojišťovna</Label><Input id="patient-insurance" value={patientInsurance} onChange={(e) => setPatientInsurance(e.target.value)} /></div>
+                  <div><Label htmlFor="patient-birth-date">Datum narození</Label><Input id="patient-birth-date" type="date" value={patientBirthDate} onFocus={() => setActiveField("patientBirthDate")} onChange={(e) => setPatientBirthDate(e.target.value)} /></div>
+                  <div><Label htmlFor="patient-insurance">Pojišťovna</Label><Input id="patient-insurance" value={patientInsurance} onFocus={() => setActiveField("patientInsurance")} onChange={(e) => setPatientInsurance(e.target.value)} /></div>
                 </div>
 
                 <div className="pt-2"><Label className="text-sm text-muted-foreground">Název dokumentu</Label><Badge variant="secondary" className="text-base font-mono mt-1 w-full justify-center py-2">{generateDocumentName()}</Badge></div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="pt-6">
+                <FarmakaHelper onInsert={(text) => appendToField(activeField, text)} disabled={!isOnline} />
               </CardContent>
             </Card>
 
@@ -639,9 +687,9 @@ export default function MedicalReportApp() {
                         <div key={field.key}>
                           <Label htmlFor={field.key}>{field.label}</Label>
                           {(field.type ?? "textarea") === "input" ? (
-                            <Input id={field.key} value={getFieldValue(field.key)} onChange={(e) => setFieldValue(field.key, e.target.value)} placeholder={field.placeholder} />
+                            <Input id={field.key} value={getFieldValue(field.key)} onFocus={() => setActiveField(field.key)} onChange={(e) => setFieldValue(field.key, e.target.value)} placeholder={field.placeholder} />
                           ) : (
-                            <Textarea id={field.key} value={getFieldValue(field.key)} onChange={(e) => setFieldValue(field.key, e.target.value)} className={field.minHeightClassName} placeholder={field.placeholder} />
+                            <Textarea id={field.key} value={getFieldValue(field.key)} onFocus={() => setActiveField(field.key)} onChange={(e) => setFieldValue(field.key, e.target.value)} className={field.minHeightClassName} placeholder={field.placeholder} />
                           )}
                         </div>
                       ))}
