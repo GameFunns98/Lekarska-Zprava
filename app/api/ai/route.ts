@@ -119,7 +119,7 @@ const resolveReportType = (value: unknown): ReportType => {
 }
 
 const taskByType: Record<ReportType, string> = {
-  medical: "Na základě tohoto popisu případu vytvoř strukturovanou lékařskou zprávu",
+  medical: "Na základě tohoto popisu případu vytvoř strukturovanou lékařskou zprávu s lékařskou terminologií, snaž se využít všechny informace podané v promptu",
   psychological: "Na základě tohoto popisu případu vytvoř strukturovanou psychologickou zprávu",
 }
 
